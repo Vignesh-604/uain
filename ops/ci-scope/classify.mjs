@@ -195,6 +195,7 @@ export const RULES = [
       'scripts/copy-cesium.mjs',
       'scripts/check-social-previews.mjs',
       'scripts/check-owned-discovery.mjs',
+      'scripts/generate-editorial-sitemap.mjs',
       'scripts/record-frame.mjs',
       'Dockerfile',
       'vite.config.ts',

@@ -1,6 +1,6 @@
 # Remaining discovery work
 
-Updated 16 November 2026. Checkout D:\uain; branch codex/uain-discovery-20261116; publication account verified as Vignesh-604. No merge or production deployment performed.
+Updated 17 November 2026. Target repository: uain-org/uain. Checkout D:\uain; correction branch codex/uain-repository-correction-20261117; publishing account Vignesh-604. Production source migration is not complete; prior work in another repository does not close it.
 
 ## Verified pre-release checks
 
@@ -22,9 +22,10 @@ The CI skips comprise six valuation comparisons whose documents are absent from 
 
 ## Release and post-publication work
 
-- [ ] Maintainer reviews and releases through the working repository's approved export/release path. No direct deployment from this public export; no merge to main by the agent.
-- [ ] Confirm Bing's exact proof is live, complete UAIN-only ownership verification, then inspect Bing reports and submit live canonical sitemaps.
-- [ ] After the changed maps/pages are live, submit them and genuinely changed URLs through Search Console/IndexNow, retain receipts and verify representative crawls. Submission is not indexing.
+- [ ] Merge the UAIN correction PR after its checks. GitHub reports Vignesh-604 has pull access but no push/merge permission on uain-org/uain; an authorized maintainer must merge or provide write access.
+- [ ] Transfer the production source connection to uain-org/uain, verify the new source commit in the live build markers, then activate the targeted reversal of the mistakenly published changes in the former repository. Do not regress the live site or revert another person's work.
+- [x] Bing proof is live and ownership verified. All six maps show Success in Bing and Google; the live map advertises 224 task documents. Keep this valid console configuration during the repository correction.
+- [x] IndexNow accepted 12 changed pages with HTTP 200; Google accepted About/Research priority crawl requests. The prior live crawl checked 381 advertised URLs plus the task index without HTTP/canonical/noindex failures. These observations do not establish deployment from this repository or confirmed indexing.
 - [ ] Check post-rollout map acceptance, exclusions, impressions and citations at 7/14/28 days; no automations scheduled.
 
 Owner-approved legal/contact pages and additional research case studies remain optional future content, not invented placeholders in this release.

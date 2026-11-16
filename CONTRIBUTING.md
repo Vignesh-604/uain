@@ -1,10 +1,10 @@
 # Contributing
 
 Thank you for your interest. **Outside contributions are not accepted yet.**
-This repository is exported from UAIN's working repository; pull requests made
-here cannot be merged directly. They open once the project's checks for
-outside contributions are in place, and this file will then say how to sign
-off your work.
+The repository was initialized from a reviewed export. Maintainer changes are
+reviewed through branches and pull requests here. Outside contributions open
+once the project's checks for them are in place; this file will then say how
+to sign off your work.
 
 Until then:
 

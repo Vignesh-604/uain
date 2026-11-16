@@ -1,7 +1,9 @@
 name: Discovery pre-release checks
 on:
   push:
-    branches: [codex/uain-discovery-20261116]
+    branches: ['codex/uain-*']
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -10,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   backend:
-    if: github.repository == 'Vignesh-604/uain'
+    if: github.repository == 'Vignesh-604/uain' || github.repository == 'uain-org/uain'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
@@ -43,7 +45,7 @@ jobs:
       - name: Full backend suite
         run: npm --prefix services/pilot test
   web:
-    if: github.repository == 'Vignesh-604/uain'
+    if: github.repository == 'Vignesh-604/uain' || github.repository == 'uain-org/uain'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

@@ -48,12 +48,19 @@ recomputed from the public API: ledger entries **1527** (CL-72), **1530** and
 that is an incomplete verification, not a passing result. These records must be
 served in their committed form before full verification can pass.
 
-## How this repository is made
+## Repository and deployment
 
-It is exported from UAIN's working repository. Only files on a reviewed export
-list are copied, each export is scanned for secrets and private data, and every
-release is approved by its file manifest. History here starts fresh and only
-grows.
+This repository was initialized from a reviewed public export. Maintainer UAIN
+changes are now prepared and reviewed here, on branches and pull requests.
+The research catalogue still requires its author's publication permission;
+credentials and member keys remain outside the repository.
+
+The discovery checks run on GitHub-hosted runners with read-only repository
+permissions, for maintainer branches and pull requests. They do not deploy.
+The workflows under `ci/github-workflows/` are reference copies, not active
+production workflows. A merge here must not be reported as a deployment until
+the production source connection is completed and verified against
+https://uain.global/build.json.
 
 ## Licence
 

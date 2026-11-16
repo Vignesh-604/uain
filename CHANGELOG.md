@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### 2026-11-17 — correct the repository boundary
+
+- Keep UAIN implementation work in uain-org/uain, through Vignesh-604's fork and a dedicated correction branch. Do not treat changes to another repository as completion here.
+- Retain the exact public signer checksum with local key handling, and register the editorial sitemap generator as a website build input.
+- Enable the existing read-only, GitHub-hosted discovery checks for UAIN correction branches and main pull requests. No production runner or server credential is added.
+- Correct repository/contribution instructions and the work register to distinguish merged source, deployed source, and pending production ownership transfer. The current account can propose changes but cannot push or merge in uain-org/uain.
+
 ### 2026-11-16
 
 - Established the explicitly requested local Windows checkout at D:\uain and local branch codex/uain-discovery-20261116; no push or deployment.
