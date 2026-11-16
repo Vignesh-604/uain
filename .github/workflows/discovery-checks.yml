@@ -60,6 +60,7 @@ jobs:
       - name: Discovery deployment and signer contracts
         run: |
           node --test ops/ci-scope/classify.test.mjs
+          node --test ops/release/record-uain.test.mjs
           node --test --test-name-pattern='the signer is served at a stable public address with its checksum' apps/baink/test/mcp-member.test.mjs
       - name: Actual isolated Nginx routing
         if: '!cancelled()'

@@ -10,6 +10,7 @@
 - Keep signer serving and both published-guide checksum assertions mandatory in the public repository; report the omitted reference-document assertion as an explicit subtest skip only when that unexported document is absent.
 - Enable the existing read-only, GitHub-hosted discovery checks for UAIN correction branches and main pull requests. No production runner or server credential is added.
 - Correct repository/contribution instructions and the work register to distinguish merged source, deployed source, and pending production ownership transfer. The current account can propose changes but cannot push or merge in uain-org/uain.
+- Point the active UAIN deployment-record reader and evidence URLs at this repository, with a regression test for repository identity; do not read legacy deployment runs as UAIN release evidence.
 
 ### 2026-11-16
 
