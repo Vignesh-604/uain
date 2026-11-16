@@ -32,3 +32,5 @@
 - Disabled one inapplicable type-aware lint rule only for the two new pilot modules, since it requires strictNullChecks and pilot compiles with strict:false; all existing baseline lint diagnostics remain visible.
 
 - Final review retained exhaustive comparison against all 21,600 tracked public catalogue rows. Valuation comparisons skip only when the entire unpublished fixture directory is absent; missing individual inputs fail. A read-only local run against the original valuation directory passed all 31 focused checks with zero skips; no private content copied/published.
+
+- Final pre-release verification succeeded on code 9f4f1bb, Actions run 43904845015: normal and write-thread PostgreSQL modes each 923 passed / 9 explicit skips / 0 failed; web and actual Nginx jobs succeeded. Six omitted valuation-document comparisons also passed locally against read-only original fixtures. Lint comparison shows no introduced diagnostics. Browser mobile/keyboard/unavailable-data checks completed; developer-protocol permission for disabling JavaScript was declined and not bypassed. Updated the work register with exact coverage and release-only dependencies.
