@@ -33,3 +33,7 @@ test('unfiltered task pagination is self canonical and filters noindex', () => {
 });
 
 test('HTML listing refuses incomplete authority before interpreting zero or page counts',()=>{for(const r of [{totalOpen:null,count:0,pages:1},{central:{status:'unavailable'},count:0},{central:{status:'available',truncated:true},count:1}])assert.equal(m.taskListingComplete(r),false);assert.equal(m.taskListingComplete({count:25,pages:2,central:{status:'available',truncated:false}}),true);});
+
+test('ambiguous duplicate task query parameters are noindex',()=>{
+ for(const q of ['?page=1&page=999','?status=open&status=open']) assert.equal(m.taskPagePolicy(new URL('https://uain.global/tasks'+q),1).noindex,true);
+});

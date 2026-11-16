@@ -24,3 +24,13 @@ for (const path of [
       assert.doesNotMatch(document, /<form/);
     },
   );
+
+test('insight governance change has consistent visible, structured and sitemap dates',()=>{
+ const path='/insights/measured-trust-not-blind-trust';
+ const html=fs.readFileSync('dist/client'+path+'.html','utf8');
+ const schemas=[...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)].map(m=>JSON.parse(m[1]));
+ assert.equal(schemas.find(s=>s['@type']==='Article').dateModified,'2026-11-16');
+ assert.match(html.replace(/<!--[\s\S]*?-->/g,''),/Updated 16 November 2026/);
+ const map=fs.readFileSync('public/sitemap.xml','utf8');
+ assert.ok(map.includes('<loc>https://uain.global'+path+'</loc><lastmod>2026-11-16</lastmod>'));
+});

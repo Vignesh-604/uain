@@ -14,3 +14,8 @@
 - Local Edge control approval timed out before authenticated console review. No account/property change or submission occurred.
 
 - Independent review: corrected task-map/detail ID alignment, incomplete task HTML handling, relative reverse-proxy redirect, mandatory IndexNow ownership proof under injected transports and machine-route exclusions. Extended the real Nginx fixture and added 10,001-URL batching coverage; live routing execution remains gated.
+
+### 2026-11-16 — branch publication follow-up
+
+- Aligned insight visible, structured and sitemap modification dates through one editorial source; noindex duplicate task query parameters. Regression tests reproduced both issues before correction.
+- Verified local Git credentials against GitHub as Vignesh-604. Publishing is authorized only to the discovery branch; main/merge/deployment remain unauthorized.

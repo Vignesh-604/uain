@@ -50,7 +50,8 @@ export function sitemapIndex(taskCount: number, recordCount = 0) {
   return `<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${paths.map((p) => `<sitemap><loc>${ORIGIN}${p}</loc></sitemap>`).join('')}</sitemapindex>`;
 }
 export function taskPagePolicy(url: URL, page: number) {
-  const noindex = [...url.searchParams].some(
+  const duplicateKeys = [...url.searchParams.keys()].some(k=>url.searchParams.getAll(k).length>1);
+  const noindex = duplicateKeys || [...url.searchParams].some(
     ([k, v]) => k !== 'page' && !(k === 'status' && v === 'open'),
   );
   return { canonical: page > 1 ? `/tasks?page=${page}` : '/tasks', noindex };

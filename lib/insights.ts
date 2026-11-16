@@ -1,3 +1,6 @@
+/** Meaningful editorial change: distinguish proposed governance from current operation. */
+export const INSIGHTS_UPDATED = '2026-11-16';
+export const INSIGHTS_UPDATED_LABEL = '16 November 2026';
 export type InsightSource = {
   label: string;
   organization: string;

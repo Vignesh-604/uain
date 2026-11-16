@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { updates } from '../lib/updates.ts';
-import { insights } from '../lib/insights.ts';
+import { insights, INSIGHTS_UPDATED } from '../lib/insights.ts';
 const p = 'public/sitemap.xml';
 let xml = fs.readFileSync(p, 'utf8');
 // One source owns each editorial article slug/date; existing non-editorial entries stay intact.
@@ -9,7 +9,7 @@ xml = xml.replace(
   '',
 );
 const articles = [
-  ...insights.map((i) => ({ path: '/insights/' + i.slug })),
+  ...insights.map((i) => ({ path: '/insights/' + i.slug, date: INSIGHTS_UPDATED })),
   ...updates.map((u) => ({ path: '/updates/' + u.slug, date: u.date })),
 ];
 xml = xml.replace(
