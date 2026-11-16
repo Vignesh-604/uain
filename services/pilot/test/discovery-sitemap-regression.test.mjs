@@ -17,7 +17,7 @@ const central = (n) => ({
   history: [{ id: 'closed', status: 'closed' }],
 });
 for (const n of [0, 1, 200, 201])
-  test(`sitemap includes all ${n} eligible central rows across shards`, () => {
+  void test(`sitemap includes all ${n} eligible central rows across shards`, () => {
     const c = central(n),
       ids = [];
     for (let page = 1; page <= Math.max(1, Math.ceil(n / 200)); page++) {
@@ -27,7 +27,7 @@ for (const n of [0, 1, 200, 201])
     }
     assert.equal(new Set(ids).size, n);
   });
-test('sitemap refuses unavailable or incomplete central authority', () => {
+void test('sitemap refuses unavailable or incomplete central authority', () => {
   for (const c of [
     { status: 'unavailable', rows: [] },
     { ...central(1), truncated: true },
@@ -37,7 +37,7 @@ test('sitemap refuses unavailable or incomplete central authority', () => {
       /sitemap authority unavailable/,
     );
 });
-test('sitemap deduplicates and excludes unclaimable central rows and history', () => {
+void test('sitemap deduplicates and excludes unclaimable central rows and history', () => {
   const c = central(1);
   c.rows.push(c.rows[0], { id: 'held', claimable: false, status: 'open' });
   assert.deepEqual(
@@ -46,4 +46,4 @@ test('sitemap deduplicates and excludes unclaimable central rows and history', (
   );
 });
 
-test('sitemap omits central IDs without a public detail route',()=>{const c=central(1);c.rows.push({id:'unrouted',claimable:true,status:'open'},{id:'T-123',claimable:true,status:'open'});assert.deepEqual(queryNativePublicRows(url(),[],{},undefined,c).tasks.map(t=>t.id),['T-central-0']);});
+void test('sitemap omits central IDs without a public detail route',()=>{const c=central(1);c.rows.push({id:'unrouted',claimable:true,status:'open'},{id:'T-123',claimable:true,status:'open'});assert.deepEqual(queryNativePublicRows(url(),[],{},undefined,c).tasks.map(t=>t.id),['T-central-0']);});

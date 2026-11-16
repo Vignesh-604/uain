@@ -85,6 +85,7 @@ export function LiveTaskSpotlight() {
             </div>
           </div>
           <div className="home-task__bottom">
+            {/* oxlint-disable-next-line next/no-html-link-for-pages -- Generated record routes require full document navigation. */}
             <a href="/records/projects">Read current public research records</a>
           </div>
         </>

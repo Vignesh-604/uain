@@ -12,7 +12,7 @@ export default function Page() {
     <main id="main-content">
       <SiteHeader />
       <article
-        className="page-shell article__body"
+        className="page-shell discovery-article"
         style={{ paddingBlock: '4rem' }}
       >
         <h1>About UAIN</h1>

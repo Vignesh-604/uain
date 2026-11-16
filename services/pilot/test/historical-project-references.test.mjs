@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { publicRecordResponse } from '../dist/src/api/public-record-pages.js';
-test('historical project references explain missing or hidden records without exposing them', async () => {
+void test('historical project references explain missing or hidden records without exposing them', async () => {
   const calls = [];
   const read = async (u) => {
     calls.push(u.pathname);

@@ -9,10 +9,14 @@ concurrency:
   group: discovery-checks-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  verify:
+  backend:
     if: github.repository == 'Vignesh-604/uain'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        write-thread: ['0', '1']
     services:
       postgres:
         image: postgres:17-alpine
@@ -27,6 +31,7 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 12
     env:
       UAIN_TEST_PG: postgres://uain:uain-test-only@127.0.0.1:5432/postgres
+      UAIN_WRITE_THREAD: ${{ matrix.write-thread }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -35,13 +40,20 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm --prefix services/pilot ci --ignore-scripts
-      - name: Backend normal pass
+      - name: Full backend suite
         run: npm --prefix services/pilot test
-      - name: Backend write-thread pass
-        if: '!cancelled()'
-        run: UAIN_WRITE_THREAD=1 npm --prefix services/pilot test
-      - name: Website build and discovery checks
-        if: '!cancelled()'
+  web:
+    if: github.repository == 'Vignesh-604/uain'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Website and discovery checks
         run: npm run build:web && npx tsc --noEmit -p tsconfig.json && node scripts/check-seo.mjs && node --test scripts/indexnow.test.mjs scripts/discovery-content.test.mjs
       - name: Actual isolated Nginx routing
         if: '!cancelled()'
