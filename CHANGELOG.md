@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### 2026-11-17 — production build-input registration
+
+- Registered the editorial sitemap generator as an input to the website image so future generator changes rebuild the site. The existing production contract test exposed the omission; all 25 classifier tests pass after correction.
+
 ### 2026-11-16 — live Bing ownership and IndexNow follow-up
 
 - Deployed the exact operator-provided Bing homepage tag in the existing production web image, including regenerated precompressed HTML; verified it before the body for both compressed and identity responses.
