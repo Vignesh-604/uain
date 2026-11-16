@@ -1,3 +1,4 @@
+import { CENTRAL_TASK_ID } from './public-task-id.ts';
 import {projectArea} from './project-areas.ts';
 import {nativeTaskDiscovery} from './public-read.ts';
 /** Filters operate on one completed verified catalogue, never on a new proof
@@ -9,11 +10,12 @@ import {nativeTaskDiscovery} from './public-read.ts';
  * whose answers are still being checked or compared, and for central tasks under review. */
 export const TASK_TABS=['open','answered','under_review','closed'] as const;
 const LEGACY_STATUSES:Record<string,string[]>={under_review:['awaiting_verification','needs_comparison']};
-function discoveryRows(input:any[],projects:Record<string,any>,requested:string,time:string,central?:{status:string;rows:any[];history?:any[]}){
+function discoveryRows(input:any[],projects:Record<string,any>,requested:string,time:string,central?:{status:string;rows:any[];history?:any[];truncated?:boolean}){
+ if(requested==='sitemap'&&central&&(central.status!=='available'||central.truncated))throw Error('sitemap authority unavailable');
  const statuses=LEGACY_STATUSES[requested]??[requested];
  const rows=input.flatMap(row=>{for(const status of statuses){const discovery=nativeTaskDiscovery(row,projects[row.project_id],status,time);if(discovery&&!(status==='open'&&discovery.closed_to_new_work))return[{...row,policy:discovery.policy,discovery,project_title:projects[row.project_id].title}]}return[]});
- if(central?.status==='available'){if(['open','all'].includes(requested))rows.push(...central.rows);else rows.push(...(central.history??[]).filter(r=>r.status===requested))}
- return rows;
+ if(central?.status==='available'){if(['open','all','sitemap'].includes(requested))rows.push(...central.rows.filter(r=>requested!=='sitemap'||(r.claimable===true&&CENTRAL_TASK_ID.test(r.id))));else rows.push(...(central.history??[]).filter(r=>r.status===requested))}
+ return requested==='sitemap'?[...new Map(rows.map(r=>[r.id,r])).values()]:rows;
 }
 export function queryNativePublicRows(url:URL,input:any[],projects:Record<string,any>={},time=new Date().toISOString(),central?:{status:string;rows:any[];[key:string]:any}) {
  const category=url.pathname.split('/')[2],name=category==='directory'?'participants':category;

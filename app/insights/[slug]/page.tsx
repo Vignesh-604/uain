@@ -3,7 +3,7 @@ import { pageMetadata } from '@/lib/seo';
 import { ArrowLeft, ArrowRight, Clock3, ExternalLink } from 'lucide-react';
 import { notFound } from 'next/navigation';
 import { SiteFooter, SiteHeader } from '@/components/site-chrome';
-import { getInsight, insights } from '@/lib/insights';
+import { getInsight, insights, INSIGHTS_UPDATED, INSIGHTS_UPDATED_LABEL } from '@/lib/insights';
 
 type InsightPageProps = {
   params: Promise<{ slug: string }>;
@@ -50,6 +50,8 @@ export default async function InsightArticle({ params }: InsightPageProps) {
         Skip to article
       </a>
       <SiteHeader />
+      {/* oxlint-disable-next-line next/no-html-link-for-pages -- Static-export routes use full document navigation. */}
+      <p className="page-shell">These insights explain the white-paper proposal. Governance thresholds and federation ambitions do not grant current member permissions. The network is in testing and current submissions use central review. <a href="/governance">Current operation and proposed governance</a>.</p>
 
       <script
         type="application/ld+json"
@@ -61,7 +63,7 @@ export default async function InsightArticle({ params }: InsightPageProps) {
             description: insight.dek,
             url: `https://uain.global/insights/${insight.slug}`,
             datePublished: '2026-10-06',
-            dateModified: '2026-10-21',
+            dateModified: INSIGHTS_UPDATED,
             author: {
               '@type': 'Organization',
               name: 'UAIN Editorial',
@@ -88,7 +90,7 @@ export default async function InsightArticle({ params }: InsightPageProps) {
             <h1>{insight.title}</h1>
             <p className="article-hero__dek">{insight.dek}</p>
             <div className="article-hero__meta">
-              <span>{insight.date} · Updated 21 October 2026</span>
+              <span>{insight.date} · Updated {INSIGHTS_UPDATED_LABEL}</span>
               <span>
                 <Clock3 size={15} aria-hidden="true" />
                 {insight.readingTime}

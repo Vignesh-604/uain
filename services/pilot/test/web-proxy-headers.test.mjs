@@ -122,3 +122,7 @@ test('the kit and signer are served on uain.global from BAINK, read only, with n
   const first = locations.findIndex((l) => l.name.startsWith('~'));
   assert.ok(locations.indexOf(files[0]) <= first + 1 && locations.indexOf(files[1]) <= first + 1, 'the file locations are the first regex locations');
 });
+void test('legacy explainer redirect retains HTTPS front-door authority through a relative Location',()=>{
+ const block=text.match(/location = \/uain-in-60-seconds\.html\s*\{([^}]+)\}/)?.[1];
+ assert.ok(block,'explicit legacy route');assert.match(block,/absolute_redirect off;/);assert.match(block,/return 308 \/about;/);
+});

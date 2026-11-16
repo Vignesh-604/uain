@@ -28,6 +28,7 @@ const heroIntroduction =
 
 export const metadata: Metadata = pageMetadata({
   title: 'United AI Network — The Federation of AI',
+  verification: { other: { 'msvalidate.01': '570530BEEE384EE71F1852F8040785AD' } },
   description,
   alternates: {
     canonical: '/',

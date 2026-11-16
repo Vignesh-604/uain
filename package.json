@@ -17,7 +17,7 @@
     "test:organizations": "node --test services/project-organizations/test/*.test.mjs services/fund-manager/test/*.test.mjs && python3 -m unittest discover -s ops/custody -p 'test_project_organizations.py'",
     "dev": "node scripts/copy-cesium.mjs && vinext dev",
     "build": "npm run build:pilot && npm run build:web && npm run check:worker",
-    "build:web": "node scripts/copy-cesium.mjs && vinext build && node scripts/record-frame.mjs dist/client && node ops/docs/build-id.mjs uain-web dist/client/build.json && npm run check:social-previews && node scripts/check-owned-discovery.mjs",
+    "build:web": "node --experimental-strip-types scripts/generate-editorial-sitemap.mjs && node scripts/copy-cesium.mjs && vinext build && node scripts/record-frame.mjs dist/client && node ops/docs/build-id.mjs uain-web dist/client/build.json && npm run check:social-previews && node scripts/check-owned-discovery.mjs",
     "check:worker": "node ops/ci-scope/verify-worker-bundle.mjs dist/client/worker",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
