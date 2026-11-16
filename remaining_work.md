@@ -1,6 +1,6 @@
 # Remaining discovery work
 
-Updated 16 November 2026. Checkout D:\uain; follow-up branch codex/uain-discovery-live-followup-20261116; publication account verified as Vignesh-604. The narrow live Bing ownership repair is deployed; the complete discovery rollout is in progress in the working repository.
+Updated 17 November 2026. Checkout D:\uain; follow-up branch codex/uain-discovery-live-followup-20261116; publication account verified as Vignesh-604. The complete discovery rollout and Google/Bing submissions are verified live; source d27ec906.
 
 ## Verified pre-release checks
 
@@ -22,10 +22,10 @@ The CI skips comprise six valuation comparisons whose documents are absent from 
 
 ## Release and post-publication work
 
-- [ ] Maintainer reviews and releases through the working repository's approved export/release path. No direct deployment from this public export; no merge to main by the agent.
+- [x] Released through a reviewed branch/PR in the working repository as Vignesh-604. Deployment 43934404612 succeeded; no direct push to main or deployment from the public export.
 - [x] Confirm Bing's exact proof is live, complete UAIN-only ownership verification, then inspect Bing reports and submit live canonical sitemaps. Verified 16 November 2026: all three maps Success, 149 discovered URLs, zero errors/warnings.
-- [ ] After the changed maps/pages are live, submit them and genuinely changed URLs through Search Console/IndexNow, retain receipts and verify representative crawls. Submission is not indexing.
-- [ ] Check post-rollout map acceptance, exclusions, impressions and citations at 7/14/28 days; no automations scheduled.
+- [x] All six maps show Success in both consoles; IndexNow accepted 12 changed documents with HTTP 200. Google accepted About/Research priority crawl requests. All 381 advertised URLs and the task index passed live HTTP/canonical/robots checks. Receipts retained; submission is not indexing.
+- [ ] Review later indexed coverage, exclusions, impressions and citations at 7/14/28 days. Initial map acceptance is complete; no automations scheduled and no further operator setup is required for these submissions.
 
 Owner-approved legal/contact pages and additional research case studies remain optional future content, not invented placeholders in this release.
 
@@ -35,8 +35,9 @@ Owner-approved legal/contact pages and additional research case studies remain o
 - [x] GSC accepted the existing task sitemap index; it currently advertises only the /tasks index, not central details.
 - [x] Google accepted one verified currently-open task into its priority indexing queue; actual crawling/indexing remains pending.
 - [x] Resolved the Bing ownership part of the production mismatch: exact tag deployed and verified in compressed and identity HTML. Existing page content otherwise preserved by this narrow repair.
-- [ ] Release the reviewed complete discovery code through the working repository branch codex/uain-discovery-production-20261116, verify all public pages and repaired maps, then submit the newly live aggregate sitemap and changed URLs. The earlier export merge alone did not deploy them.
+- [x] Released the complete discovery code through codex/uain-discovery-production-20261116; production source d27ec906 verified on 17 November 2026. New pages and repaired maps work, the internal-port redirect is fixed, and both providers accepted the maps. The working repository also records the verified release and post-publication receipts.
 
 Bing verification is complete. IndexNow accepted the changed homepage with HTTP 202 at 2026-11-16T17:12:20Z; indexing and provider verification are asynchronous. UAIN-only browser scope preserved; other properties, users and browsing data were not accessed or changed.
 
 - [x] Bounded live crawl of all 147 distinct URLs currently advertised by the three existing maps: all returned 200 and none carried noindex. This does not include the new routes still returning 404 or imply search indexing.
+- [x] Final post-rollout crawl supersedes the earlier checkpoint: all 381 advertised URLs plus the task index passed (382 documents); no new route remains 404. Bing proof is present in both homepage encodings. IndexNow's final 12-document receipt is HTTP 200 with verification complete, not the initial pending HTTP 202.

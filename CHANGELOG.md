@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### 2026-11-17 — verified live discovery completion
+
+- Released the reviewed code through a branch and pull request in the working repository, authored and merged as Vignesh-604. Production deployment 43934404612 succeeded and serves source d27ec906; web is 2/2 ready and pilot 4/4.
+- Verified all 381 distinct advertised public URLs plus the task index: 382 healthy documents, correct canonicals and no noindex blocks. The homepage's empty canonical path and slash normalize to the same root. All new pages are live and the research hub no longer redirects to the internal HTTP port.
+- Google and Bing each report Success for all six submitted maps, including both current task leaves (200 and 24 URLs). Bing has zero sitemap errors/warnings. IndexNow accepted all 12 changed documents with HTTP 200 at 2026-11-16T19:09:15Z; hosted proof survived the normal rollout.
+- Google accepted About and Research priority crawl requests in addition to the earlier open task. Bing reports the homepage indexed and accepted its refresh request. New-page crawling/indexing, rankings and citations remain controlled by providers; no indexing guarantee or scheduled automation is claimed.
+- Recorded activation and public verification in the working repository's canonical release record and reconciled its unfinished-work register. Full release checks, both backend modes, upgrade rehearsal, production builds, TypeScript/SEO, 23 discovery checks, real Nginx routing, 118 release-tool checks and independent review passed. No direct push to main.
+
 ### 2026-11-17 — production build-input registration
 
 - Registered the editorial sitemap generator as an input to the website image so future generator changes rebuild the site. The existing production contract test exposed the omission; all 25 classifier tests pass after correction.
@@ -52,5 +60,5 @@
 - Submitted https://uain.global/records/sitemap.xml in the authorized sc-domain:uain.global Search Console property; Google returned success and 122 discovered URLs.
 - Submitted the currently live https://uain.global/tasks/sitemap.xml; Google returned success. Its current leaf contains only /tasks, so the central-task sitemap repair is still awaiting rollout.
 - Requested indexing for the verified public, open task T-OPP-04802-1-prior-art-survey-r6-p3; Google accepted it into the priority crawl queue. This is not confirmed indexing.
-- Confirmed PR #2 merged, but production still lacks /about and /sitemap-index.xml (404), /research redirects to the internal HTTP port, and Bing proof is absent (both homepage tag and XML file). Bing remains unverified; no IndexNow key or submission was invented.
+- At that checkpoint, confirmed PR #2 merged but production still lacked the new routes and Bing proof. The later verified live-completion entry above records their resolution.
 - Confirmed the public export has no production deployment workflow. The reviewed changes must pass through the working repository's release path; no deployment or server configuration was modified by this session.
