@@ -15,6 +15,16 @@ import {
 import { handleValuation } from '../dist/src/api/valuation-routes.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+// These documents are not included in the public source export. Only their
+// absence skips a comparison; malformed, unreadable, or mismatched files fail.
+function readPublishedFixture(t, ...segments) {
+  try {
+    return JSON.parse(readFileSync(join(root, 'docs', 'valuation', ...segments), 'utf8'));
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    t.skip(`docs/valuation/${segments.join('/')} is absent from this source export; published-fixture comparison unavailable`);
+  }
+}
 const within = (actual, expected, pct) =>
   assert.ok(
     Math.abs(actual - expected) / expected <= pct,
@@ -22,10 +32,9 @@ const within = (actual, expected, pct) =>
   );
 
 describe('formula v0', () => {
-  test('the published parameters are the ones the code uses', () => {
-    const published = JSON.parse(
-      readFileSync(join(root, 'docs', 'valuation', 'formula-v0.json'), 'utf8'),
-    );
+  test('the published parameters are the ones the code uses', (t) => {
+    const published = readPublishedFixture(t, 'formula-v0.json');
+    if (published === undefined) return;
     assert.deepEqual(published, JSON.parse(JSON.stringify(FORMULA_V0)));
   });
 
@@ -61,18 +70,17 @@ describe('formula v0', () => {
     within(r.sensitivity.A.low, r.budget / 2, 1e-6);
   });
 
-  test('every published inputs file is valid and computes', () => {
-    for (const f of ['alzheimers', 'breast-lung-cancer', 'longevity', 'rainforest-example']) {
-      const doc = JSON.parse(
-        readFileSync(join(root, 'docs', 'valuation', 'inputs', `${f}.json`), 'utf8'),
-      );
+  for (const f of ['alzheimers', 'breast-lung-cancer', 'longevity', 'rainforest-example']) {
+    test(`published inputs ${f} is valid and computes`, (t) => {
+      const doc = readPublishedFixture(t, 'inputs', `${f}.json`);
+      if (doc === undefined) return;
       for (const [k, v] of Object.entries(doc.inputs))
         assert.ok(v.rationale && v.source, `${f}.${k} needs a rationale and a source`);
       const inputs = extractInputs(doc);
       assert.deepEqual(validateInputs(inputs), [], f);
       assert.ok(computeValuation(inputs).budget > 0, f);
-    }
-  });
+    });
+  }
 });
 
 describe('validation', () => {
@@ -169,12 +177,16 @@ describe('routes', () => {
       const f = await (await fetch(`${base}/api/valuation/formula`)).json();
       assert.equal(f.version, 'v0');
 
-      const doc = JSON.parse(
-        readFileSync(join(root, 'docs', 'valuation', 'inputs', 'alzheimers.json'), 'utf8'),
-      );
+      // An annotated numeric example exercises extraction and HTTP computation
+      // even when the separately checked published research inputs are absent.
+      const doc = { inputs: {
+        A: { value: 6 }, S: { value: 0.5 }, N: { value: 1 },
+        P: { value: 0.1 }, years: { value: 0 }, Q: { value: 1 },
+      } };
       const r = await post(base, '/api/valuation/compute', doc);
       assert.equal(r.status, 200);
       const body = await r.json();
+      assert.equal(body.budget, 500000000);
       const local = computeValuation(extractInputs(doc));
       assert.equal(body.budget, local.budget);
       assert.equal(body.digest, canonicalDigest(extractInputs(doc), local));
@@ -192,6 +204,20 @@ describe('routes', () => {
 
       assert.equal((await fetch(`${base}/api/valuation/nope`)).status, 404);
       assert.equal((await fetch(`${base}/api/other`)).status, 418);
+    });
+  });
+
+  test('computes the published Alzheimer inputs over HTTP', async (t) => {
+    const doc = readPublishedFixture(t, 'inputs', 'alzheimers.json');
+    if (doc === undefined) return;
+    await withServer(async (base) => {
+      const response = await post(base, '/api/valuation/compute', doc);
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      const inputs = extractInputs(doc);
+      const local = computeValuation(inputs);
+      assert.equal(body.budget, local.budget);
+      assert.equal(body.digest, canonicalDigest(inputs, local));
     });
   });
 });

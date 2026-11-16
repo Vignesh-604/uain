@@ -1,4 +1,3 @@
-/* oxlint-disable typescript/no-useless-default-assignment -- Rule requires strictNullChecks; this pilot compiles with strict:false. */
 const ORIGIN = 'https://uain.global';
 const escape = (s: string) =>
   s

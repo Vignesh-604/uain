@@ -8,13 +8,14 @@ const source = await readFile(new URL('../dist/src/api/server.js', import.meta.u
 // The page frame's helpers (record-frame.ts, 10 November 2026) are imports of server.js.
 const frame = await import('../dist/src/api/record-frame.js');
 // The central task page (central-task-page.ts, 16 November 2026) is an import of server.js too.
+const discovery = await import('../dist/src/api/discovery-sitemaps.js');
 const centralPage = await import('../dist/src/api/central-task-page.js');
 const start = source.indexOf("const DISCOVERY_ORIGIN =");
 const end = source.indexOf('\nconst publicParticipant =', start);
 assert(start > 0 && end > start, 'compiled discovery handler exists');
 const task = { id: 'T-37', project_id: 'P', title: 'Question <script>', question: 'Exact question </script><script>bad</script>', done_when: 'Exact output', created_at: '2026-10-19T00:00:00Z', status: 'open', novelty: 'stated', prior_art: { statement: 'Source search', searched: [] }, benevolence: { class: 'neutral' }, verification: { criteria: 'Exact check', method: 'reproduce' } };
 async function render(selected = task, project = { title: 'Project', state: 'active' }, path = '/tasks/T-37', central = null) {
-  const context = vm.createContext({ URL, process: { env: { UAIN_AUTHORITY: 'native' } }, COPY: 'fixture', framedDocument: frame.framedDocument, longDay: frame.longDay, noticeDocument: frame.noticeDocument, pageHead: frame.pageHead, RECORD_PAGE_CSP: frame.RECORD_PAGE_CSP, CENTRAL_TASK_ID: centralPage.CENTRAL_TASK_ID, renderCentralTaskMain: centralPage.renderCentralTaskMain, centralTaskForPage: async () => central, acceptedWorkDeps: () => null, acceptedWork: async () => ({ status: 503, body: {} }), nativePublicData: async url => url.pathname.startsWith('/api/tasks/') ? { status: selected ? 200 : 404, body: selected ?? { error: 'not_found' } } : { status: project ? 200 : 404, body: project }, });
+  const context = vm.createContext({ ...discovery, URL, process: { env: { UAIN_AUTHORITY: 'native' } }, COPY: 'fixture', framedDocument: frame.framedDocument, longDay: frame.longDay, noticeDocument: frame.noticeDocument, pageHead: frame.pageHead, RECORD_PAGE_CSP: frame.RECORD_PAGE_CSP, CENTRAL_TASK_ID: centralPage.CENTRAL_TASK_ID, renderCentralTaskMain: centralPage.renderCentralTaskMain, centralTaskForPage: async () => central, acceptedWorkDeps: () => null, acceptedWork: async () => ({ status: 503, body: {} }), nativePublicData: async url => url.pathname.startsWith('/api/tasks/') ? { status: selected ? 200 : 404, body: selected ?? { error: 'not_found' } } : { status: project ? 200 : 404, body: project }, });
   vm.runInContext(source.slice(start, end) + '\nglobalThis.handle = handleTaskDiscovery;', context);
   let status, body;
   await context.handle({ method: 'GET' }, { writeHead(s) { status = s; }, end(b) { body = b; } }, new URL('https://uain.global' + path));
@@ -70,7 +71,7 @@ test('a central task id reads as its own page here, and an unknown one is a 404 
 // The /tasks tabs (16 November 2026): every state has a tab with its count, the selected tab
 // changes the title and lead, and the tabs keep the search query.
 async function renderList(path, list) {
-  const context = vm.createContext({ URL, URLSearchParams, process: { env: { UAIN_AUTHORITY: 'native' } }, COPY: 'fixture', framedDocument: frame.framedDocument, longDay: frame.longDay, noticeDocument: frame.noticeDocument, pageHead: frame.pageHead, RECORD_PAGE_CSP: frame.RECORD_PAGE_CSP, CENTRAL_TASK_ID: centralPage.CENTRAL_TASK_ID, renderCentralTaskMain: centralPage.renderCentralTaskMain, centralTaskForPage: async () => null,
+  const context = vm.createContext({ ...discovery, URL, URLSearchParams, process: { env: { UAIN_AUTHORITY: 'native' } }, COPY: 'fixture', framedDocument: frame.framedDocument, longDay: frame.longDay, noticeDocument: frame.noticeDocument, pageHead: frame.pageHead, RECORD_PAGE_CSP: frame.RECORD_PAGE_CSP, CENTRAL_TASK_ID: centralPage.CENTRAL_TASK_ID, renderCentralTaskMain: centralPage.renderCentralTaskMain, centralTaskForPage: async () => null,
     acceptedWorkDeps: () => ({}), acceptedWork: async () => ({ status: 200, body: { accepted: [{ task: 'T-OPP-1-prior-art-survey-r1-p1', submission: 'CS-1', name: 'House agent', operator: 'UAIN', time: '2026-11-15T10:30:29Z' }] } }),
     nativePublicData: async url => url.pathname === '/api/tasks' ? { status: 200, body: list(url) } : url.pathname.startsWith('/api/members/') ? { status: 200, body: { name: 'Codex (UAIN)', operator: 'United AI Network' } } : { status: 404, body: {} } });
   vm.runInContext(source.slice(start, end) + '\nglobalThis.handle = handleTaskDiscovery;', context);
@@ -105,4 +106,20 @@ test('/tasks shows a tab per state with counts, and the answered tab names who a
   assert.match(open.body, /<title>Open research tasks \| UAIN<\/title>/);
   assert.match(open.body, /class="record-tab on" href="\/tasks" aria-current="page">Open/);
   assert.equal((await renderList('/tasks?status=nonsense', list)).status, 200, 'an unknown tab falls back to open');
+});
+
+void test('task HTTP pagination uses self canonical URLs and filtered variants stay noindex',async()=>{
+ const list=()=>({count:25,page:2,pages:2,tasks:[],central:{status:'available',truncated:false}});
+ const page=await renderList('/tasks?page=2',list);
+ assert.equal(page.status,200);assert.match(page.body,/rel="canonical" href="https:\/\/uain.global\/tasks\?page=2"/);assert.doesNotMatch(page.body,/name="robots"/);
+ const filtered=await renderList('/tasks?page=2&q=study',list);assert.match(filtered.body,/name="robots" content="noindex,follow"/);
+});
+void test('task HTTP refuses a partial authority before rendering false zero or missing page',async()=>{
+ const r=await renderList('/tasks?page=2',()=>({count:0,totalOpen:null,page:2,pages:1,tasks:[],central:{status:'unavailable'}}));
+ assert.equal(r.status,503);assert.match(r.body,/unavailable data does not mean zero activity/);
+});
+void test('task HTTP rejects malformed and oversized query input before reading authority',async()=>{
+ for(const path of ['/tasks?page=-1','/tasks?page=100001','/tasks?q='+('x'.repeat(201))]){
+  const r=await renderList(path,()=>{throw Error('invalid input must not reach authority')});assert.equal(r.status,400);
+ }
 });

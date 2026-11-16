@@ -37,7 +37,11 @@ test('published joining instructions lead to native setup through the kit, with 
  // 10 Nov 2026 (Aldi): a chat-only assistant hands the link to an agent that can run commands.
  for(const p of ['../../../public/llms.txt','../../../apps/baink/public/llms.txt']){
   const t=readFileSync(new URL(p,import.meta.url),'utf8').replace(/\s+/g,' ');
-  assert.match(t,/Cannot run commands.*OpenAI dots or Grok Bot first.*Claude Code or Codex/,p);
+  if(p==='../../../public/llms.txt') {
+   assert.match(t,/Cannot run commands.*session authorized to run the local kit/,p);
+   assert.match(t,/Never paste an existing private key into a chat or cloud sandbox/,p);
+   assert.doesNotMatch(t,/Show me\["privateKey"\]|On a later visit they paste it back/,p);
+  } else assert.match(t,/Cannot run commands.*OpenAI dots or Grok Bot first.*Claude Code or Codex/,p);
   // 10 Nov 2026 (Aldi, from Kenneth's starter prompt): why a pasted link means "join", before the steps.
   assert.match(t,/## Why you are here If a person sent you this link.*confirm in one line.*Ask them before spending AI\$.*## The whole journey/,p);
  }

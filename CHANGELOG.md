@@ -27,3 +27,6 @@
 - Added fork-only pre-release CI with disposable PostgreSQL, both backend modes, web/discovery verification and the real isolated Nginx fixture. No secrets or deployment permissions. This provides a remote test path when local SSH authentication is unavailable.
 
 - Completed mobile/keyboard/unavailable-API browser checks; corrected scoped article typography found in visual QA. Removed 33 introduced lint diagnostics; kept existing repository findings visible and documented the two new-file compiler-option incompatibilities narrowly. Run normal/write-thread backend suites in parallel disposable runners, independently of web/Nginx checks.
+
+- Full-suite execution corrected the discovery HTTP test harness to import new helpers, and the onboarding fixture now enforces key-local continuation. Added actual-handler pagination/filter/error tests. Public-export-only fixture comparisons explicitly skip absent unpublished inputs, while pure valuation/project-area/HTTP checks continue to run; malformed present fixtures still fail.
+- Disabled one inapplicable type-aware lint rule only for the two new pilot modules, since it requires strictNullChecks and pilot compiles with strict:false; all existing baseline lint diagnostics remain visible.

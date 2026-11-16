@@ -55,5 +55,16 @@
     "typescript/no-require-imports": "error",
     "typescript/no-unnecessary-type-constraint": "error",
     "typescript/no-unsafe-function-type": "error"
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "services/pilot/src/api/discovery-sitemaps.ts",
+        "services/pilot/src/native/public-task-id.ts"
+      ],
+      "rules": {
+        "typescript/no-useless-default-assignment": "off"
+      }
+    }
+  ]
 }
