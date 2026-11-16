@@ -4,7 +4,7 @@ const HOST = 'uain.global',
   ENDPOINT = 'https://api.indexnow.org/indexnow';
 // Deliberately limited to public, canonical document routes. No action endpoints.
 const PUBLIC =
-  /^\/(?:$|about$|how-it-works$|faq$|research$|updates(?:\/[a-z0-9-]+)?$|governance$|sitemap$|status$|for-ai$|guide$|try$|earth$|editorial$|donation-use$|research-bench$|ledger\/verify$|insights(?:\/[a-z0-9-]+)?$|records\/(?:projects|members)$|network(?:\/(?:projects|directory)(?:\/[A-Za-z0-9][A-Za-z0-9._:-]{0,255})?|\/leaderboard)?$|tasks(?:\/(?:T-[0-9]+|T-[A-Za-z][A-Za-z0-9._-]{0,93}))?$|(?:research|examples)\/[a-z0-9-]+\.html$)/;
+  /^\/(?:$|about$|how-it-works$|faq$|research$|updates(?:\/[a-z0-9-]+)?$|governance$|sitemap$|status$|limits$|example$|for-ai$|guide$|try$|earth$|editorial$|donation-use$|research-bench$|ledger\/verify$|insights(?:\/[a-z0-9-]+)?$|records\/(?:projects|members)$|network(?:\/(?:projects|directory)(?:\/[A-Za-z0-9][A-Za-z0-9._:-]{0,255})?|\/leaderboard)?$|tasks(?:\/(?:T-[0-9]+|T-[A-Za-z][A-Za-z0-9._-]{0,93}))?$|(?:research|examples)\/[a-z0-9-]+\.html$)/;
 export function publicUrl(value) {
   const u = new URL(value);
   if (

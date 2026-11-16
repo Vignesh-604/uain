@@ -20,6 +20,8 @@ export default function Page() {
           <time dateTime="2026-11-16">Updated 16 November 2026</time>
         </p>
         <ul>
+          <li><a href="/limits">Known limits</a></li>
+          <li><a href="/example">Accepted example and its limits</a></li>
           <li>
             <a href="/about">about</a>
           </li>

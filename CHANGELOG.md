@@ -19,3 +19,5 @@
 
 - Aligned insight visible, structured and sitemap modification dates through one editorial source; noindex duplicate task query parameters. Regression tests reproduced both issues before correction.
 - Verified local Git credentials against GitHub as Vignesh-604. Publishing is authorized only to the discovery branch; main/merge/deployment remain unauthorized.
+
+- Rebased discovery changes onto the current public export, preserving upstream removals and UAIN-first aliases; extended discovery to its existing limits/example pages. Remote test access remains blocked by SSH trust configuration.

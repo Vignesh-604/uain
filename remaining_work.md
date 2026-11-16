@@ -33,7 +33,11 @@ Register as of 16 November 2026. All implementation remains local at D:\uain on 
 ## Review follow-ups
 
 - [x] Independent review completed and five Important findings reproduced and corrected locally (16 November 2026; audit correction ledger and regression tests). No Critical findings.
-- [ ] Deferred minor: derive insight article modified date from its actual content changes, including the November governance label.
-- [ ] Deferred minor: reject/noindex duplicate page query parameters explicitly, beyond current bounds/canonical collapse.
+- [x] Insight modified date shares one source with visible copy, JSON-LD and generated sitemap (16 November 2026; regression tests).
+- [x] Duplicate task query parameters are noindex (16 November 2026; regression test).
 
 Final post-review verification, 16 November 2026: 68 focused pilot tests and 21 script/HTML tests pass; website build/TypeScript, pilot type/boundary checks and build, SEO and routing-script syntax checks pass. Full PostgreSQL/Nginx/browser and repository-wide lint gates remain open as stated above.
+
+Branch publication follow-up, 16 November 2026: user authorized pushing this branch only under Vignesh-604. GitHub API verified the Windows Git credential as Vignesh-604; the differently authenticated connector is not used. Rebased changes onto refreshed export origin/main 7694d6c, retaining upstream removals and UAIN tool aliases. Added current /limits and /example to discovery coverage. SSH test host alias is absent and direct access fails host-key verification; establish trusted SSH access before remote test execution. No host verification bypass, merge or deployment.
+
+Final branch-publication checks, 16 November 2026: rebased onto 7694d6c; 70 focused pilot tests and 22 script/HTML tests pass. Web build including owned discovery/social checks, website TypeScript, pilot build/type/boundary checks and SEO pass. Scoped new-production lint passes with the existing incompatible strictNullChecks rule excluded. Full repository lint, full PostgreSQL suites, actual Nginx acceptance and browser/account actions remain unverified. Neither production nor main is changed.
