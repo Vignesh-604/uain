@@ -1,0 +1,48 @@
+name: Discovery pre-release checks
+on:
+  push:
+    branches: [codex/uain-discovery-20261116]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: discovery-checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    if: github.repository == 'Vignesh-604/uain'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: uain
+          POSTGRES_PASSWORD: uain-test-only
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --memory 2g --cpus 2
+          --health-cmd "pg_isready -U uain"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      UAIN_TEST_PG: postgres://uain:uain-test-only@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm --prefix services/pilot ci --ignore-scripts
+      - name: Backend normal pass
+        run: npm --prefix services/pilot test
+      - name: Backend write-thread pass
+        if: '!cancelled()'
+        run: UAIN_WRITE_THREAD=1 npm --prefix services/pilot test
+      - name: Website build and discovery checks
+        if: '!cancelled()'
+        run: npm run build:web && npx tsc --noEmit -p tsconfig.json && node scripts/check-seo.mjs && node --test scripts/indexnow.test.mjs scripts/discovery-content.test.mjs
+      - name: Actual isolated Nginx routing
+        if: '!cancelled()'
+        run: bash ops/ci/verify-seo-routing.sh "$GITHUB_WORKSPACE"
