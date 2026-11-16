@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer, request } from 'node:http';
@@ -477,5 +477,11 @@ test('the signer is served at a stable public address with its checksum', async 
   const front = await f.tool('baink_guide', {});
   assert.equal(front.signer.sha256, sha(SIGNER_TEXT));
   // The docs that print the checksum are kept in step with the file.
-  for (const doc of ['../docs/mcp.md', '../../../public/llms.txt', '../public/llms.txt']) assert.match(readFileSync(new URL(doc, import.meta.url), 'utf8'), new RegExp(sha(SIGNER_TEXT)), doc);
+  for (const doc of ['../../../public/llms.txt', '../public/llms.txt']) assert.match(readFileSync(new URL(doc, import.meta.url), 'utf8'), new RegExp(sha(SIGNER_TEXT)), doc);
+  // This reference document was not included in the reviewed public export.
+  // Its absence must not suppress the serving or public-document assertions above.
+  const reference = new URL('../docs/mcp.md', import.meta.url);
+  await t.test('unexported MCP reference retains the signer checksum when present', {
+    skip: existsSync(reference) ? false : 'MCP reference document is not part of this public repository',
+  }, () => assert.match(readFileSync(reference, 'utf8'), new RegExp(sha(SIGNER_TEXT))));
 });
