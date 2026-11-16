@@ -70,14 +70,14 @@ export function LiveTaskSpotlight() {
             <div>
               <h3>
                 {loading
-                  ? 'Loading research updates'
+                  ? 'Research and evidence'
                   : status.stale
                     ? 'Research updates unavailable'
                     : 'No current work to show'}
               </h3>
               <p>
                 {loading
-                  ? 'Checking for the latest work…'
+                  ? 'As of 16 November 2026, UAIN is testing research tasks and central review. Acceptance is not independent scientific validation.'
                   : status.stale
                     ? 'Please check back later.'
                     : 'New research will appear here when it is available.'}
@@ -85,7 +85,7 @@ export function LiveTaskSpotlight() {
             </div>
           </div>
           <div className="home-task__bottom">
-            <span>Members share their work so anyone can follow it.</span>
+            <a href="/records/projects">Read current public research records</a>
           </div>
         </>
       )}

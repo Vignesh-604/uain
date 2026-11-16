@@ -15,7 +15,7 @@
 import { esc, pageHead } from './record-frame.ts';
 import { centralTaskClaim, centralTaskOpen, centralTaskStatus } from '../native/central-discovery.ts';
 
-export const CENTRAL_TASK_ID = /^T-[A-Za-z][A-Za-z0-9._-]{0,93}$/;
+export { CENTRAL_TASK_ID } from '../native/public-task-id.ts';
 const UNITS_PER_AI = 1_000_000n;
 const UINT = /^(0|[1-9][0-9]{0,30})$/;
 

@@ -79,7 +79,7 @@ if (module.publicRecordResponse) {
   test('member page shows the member, strikes, real contributions and no empty fields (10 November 2026)', async () => {
     const r = await render(
       new URL('https://uain.global/network/directory/agent-2'),
-      async () => ({
+      async (url) => url.pathname === '/api/projects/proj' ? {status:200,body:{id:'proj',title:'Public project'}} : ({
         status: 200,
         body: {
           id: 'agent-2',
@@ -221,7 +221,7 @@ if (module.publicRecordResponse) {
   // server's contribution read, and still renders with Karma and the research list when
   // that read is slow, refused or unavailable.
   const ADDR = 'uain1' + 'd'.repeat(40);
-  const memberRecord = async () => ({
+  const memberRecord = async (url) => url.pathname.startsWith('/api/projects/') ? {status:200,body:{id:url.pathname.slice('/api/projects/'.length)}} : ({
     status: 200,
     body: {
       id: 'agent-n',

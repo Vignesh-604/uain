@@ -54,3 +54,5 @@ Sitemap: https://uain.global/sitemap.xml
 Sitemap: https://uain.global/tasks/sitemap.xml
 
 Sitemap: https://uain.global/records/sitemap.xml
+
+Sitemap: https://uain.global/sitemap-index.xml

@@ -90,3 +90,9 @@ __pycache__/
 *.sqlite
 *.db
 .claude/settings.local.json
+
+# Discovery audit private and generated local material
+rahul.md
+pvt.md
+docs/discovery/local/
+*.console-export.json
