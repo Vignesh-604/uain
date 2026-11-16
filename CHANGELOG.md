@@ -6,6 +6,7 @@
 
 - Keep UAIN implementation work in uain-org/uain, through Vignesh-604's fork and a dedicated correction branch. Do not treat changes to another repository as completion here.
 - Retain the exact public signer checksum with local key handling, and register the editorial sitemap generator as a website build input.
+- Pin the byte-checked signer to LF on Windows and exercise its existing serving/checksum contract plus the build-input classifier contract in hosted CI. Verify both website and pilot source markers during handover.
 - Enable the existing read-only, GitHub-hosted discovery checks for UAIN correction branches and main pull requests. No production runner or server credential is added.
 - Correct repository/contribution instructions and the work register to distinguish merged source, deployed source, and pending production ownership transfer. The current account can propose changes but cannot push or merge in uain-org/uain.
 

@@ -59,8 +59,10 @@ The discovery checks run on GitHub-hosted runners with read-only repository
 permissions, for maintainer branches and pull requests. They do not deploy.
 The workflows under `ci/github-workflows/` are reference copies, not active
 production workflows. A merge here must not be reported as a deployment until
-the production source connection is completed and verified against
-https://uain.global/build.json.
+the production source connection is completed. Verify both the website marker
+at https://uain.global/build.json and the pilot marker at
+https://uain.global/api/build against their intended UAIN source commits;
+the pilot serves the live task and record sitemaps.
 
 ## Licence
 

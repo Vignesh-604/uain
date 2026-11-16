@@ -57,6 +57,10 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Website and discovery checks
         run: npm run build:web && npx tsc --noEmit -p tsconfig.json && node scripts/check-seo.mjs && node --test scripts/indexnow.test.mjs scripts/discovery-content.test.mjs
+      - name: Discovery deployment and signer contracts
+        run: |
+          node --test ops/ci-scope/classify.test.mjs
+          node --test --test-name-pattern='the signer is served at a stable public address with its checksum' apps/baink/test/mcp-member.test.mjs
       - name: Actual isolated Nginx routing
         if: '!cancelled()'
         run: bash ops/ci/verify-seo-routing.sh "$GITHUB_WORKSPACE"
