@@ -34,3 +34,11 @@
 - Final review retained exhaustive comparison against all 21,600 tracked public catalogue rows. Valuation comparisons skip only when the entire unpublished fixture directory is absent; missing individual inputs fail. A read-only local run against the original valuation directory passed all 31 focused checks with zero skips; no private content copied/published.
 
 - Final pre-release verification succeeded on code 9f4f1bb, Actions run 43904845015: normal and write-thread PostgreSQL modes each 923 passed / 9 explicit skips / 0 failed; web and actual Nginx jobs succeeded. Six omitted valuation-document comparisons also passed locally against read-only original fixtures. Lint comparison shows no introduced diagnostics. Browser mobile/keyboard/unavailable-data checks completed; developer-protocol permission for disabling JavaScript was declined and not bypassed. Updated the work register with exact coverage and release-only dependencies.
+
+### 2026-11-16 — live console submissions and rollout verification
+
+- Submitted https://uain.global/records/sitemap.xml in the authorized sc-domain:uain.global Search Console property; Google returned success and 122 discovered URLs.
+- Submitted the currently live https://uain.global/tasks/sitemap.xml; Google returned success. Its current leaf contains only /tasks, so the central-task sitemap repair is still awaiting rollout.
+- Requested indexing for the verified public, open task T-OPP-04802-1-prior-art-survey-r6-p3; Google accepted it into the priority crawl queue. This is not confirmed indexing.
+- Confirmed PR #2 merged, but production still lacks /about and /sitemap-index.xml (404), /research redirects to the internal HTTP port, and Bing proof is absent (both homepage tag and XML file). Bing remains unverified; no IndexNow key or submission was invented.
+- Confirmed the public export has no production deployment workflow. The reviewed changes must pass through the working repository's release path; no deployment or server configuration was modified by this session.

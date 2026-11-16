@@ -28,3 +28,15 @@ The CI skips comprise six valuation comparisons whose documents are absent from 
 - [ ] Check post-rollout map acceptance, exclusions, impressions and citations at 7/14/28 days; no automations scheduled.
 
 Owner-approved legal/contact pages and additional research case studies remain optional future content, not invented placeholders in this release.
+
+## Live follow-up — 16 November 2026
+
+- [x] GSC accepted the current public-record sitemap: success, 122 discovered URLs.
+- [x] GSC accepted the existing task sitemap index; it currently advertises only the /tasks index, not central details.
+- [x] Google accepted one verified currently-open task into its priority indexing queue; actual crawling/indexing remains pending.
+- [ ] Production rollout mismatch: PR #2 is merged into the export repository, but /about and /sitemap-index.xml still return 404; the new Bing meta proof is absent and /BingSiteAuth.xml returns 404. /research still redirects to http://uain.global:8080/research/. The live build marker reports commit 11b87c8715f0c8d00e55c7d4e22ec14fe5180377, built 2026-11-16T14:23:24Z.
+- [ ] Release the reviewed code through the working repository, then verify live proof and complete Bing/IndexNow plus repaired-map submissions. The public export contains only the fork test workflow, not a production deploy workflow.
+
+No Bing verification, IndexNow receipt or indexing success is claimed. UAIN-only browser scope preserved; other properties, users and browsing data were not accessed or changed.
+
+- [x] Bounded live crawl of all 147 distinct URLs currently advertised by the three existing maps: all returned 200 and none carried noindex. This does not include the new routes still returning 404 or imply search indexing.
