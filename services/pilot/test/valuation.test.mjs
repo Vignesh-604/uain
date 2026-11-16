@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { describe, test } from 'node:test';
@@ -15,15 +15,19 @@ import {
 import { handleValuation } from '../dist/src/api/valuation-routes.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-// These documents are not included in the public source export. Only their
-// absence skips a comparison; malformed, unreadable, or mismatched files fail.
+const fixtureDir = process.env.UAIN_VALUATION_FIXTURE_DIR || join(root, 'docs', 'valuation');
+// This directory is not included in the public source export. Once supplied,
+// all required files must exist and validate; partial fixtures must fail.
+// A reviewer can explicitly select an external, read-only fixture directory.
 function readPublishedFixture(t, ...segments) {
   try {
-    return JSON.parse(readFileSync(join(root, 'docs', 'valuation', ...segments), 'utf8'));
+    statSync(fixtureDir);
   } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-    t.skip(`docs/valuation/${segments.join('/')} is absent from this source export; published-fixture comparison unavailable`);
+    if (error.code !== 'ENOENT' || process.env.UAIN_VALUATION_FIXTURE_DIR) throw error;
+    t.skip('docs/valuation directory is absent from this source export; published-fixture comparison unavailable');
+    return;
   }
+  return JSON.parse(readFileSync(join(fixtureDir, ...segments), 'utf8'));
 }
 const within = (actual, expected, pct) =>
   assert.ok(
@@ -207,7 +211,7 @@ describe('routes', () => {
     });
   });
 
-  test('computes the published Alzheimer inputs over HTTP', async (t) => {
+  void test('computes the published Alzheimer inputs over HTTP', async (t) => {
     const doc = readPublishedFixture(t, 'inputs', 'alzheimers.json');
     if (doc === undefined) return;
     await withServer(async (base) => {

@@ -30,3 +30,5 @@
 
 - Full-suite execution corrected the discovery HTTP test harness to import new helpers, and the onboarding fixture now enforces key-local continuation. Added actual-handler pagination/filter/error tests. Public-export-only fixture comparisons explicitly skip absent unpublished inputs, while pure valuation/project-area/HTTP checks continue to run; malformed present fixtures still fail.
 - Disabled one inapplicable type-aware lint rule only for the two new pilot modules, since it requires strictNullChecks and pilot compiles with strict:false; all existing baseline lint diagnostics remain visible.
+
+- Final review retained exhaustive comparison against all 21,600 tracked public catalogue rows. Valuation comparisons skip only when the entire unpublished fixture directory is absent; missing individual inputs fail. A read-only local run against the original valuation directory passed all 31 focused checks with zero skips; no private content copied/published.

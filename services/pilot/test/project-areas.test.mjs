@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import {readFile,readdir} from 'node:fs/promises';
 import {PROJECT_AREAS,projectArea} from '../dist/src/native/project-areas.js';
 
-test('pilot search areas match every OPP and PRB catalogue entry',async(t)=>{
- const dir=new URL('../../../apps/baink/catalogue/',import.meta.url);let files;
+test('pilot search areas match every OPP and PRB catalogue entry',async()=>{
+ let dir=new URL('../../../apps/baink/catalogue/',import.meta.url);let files;
  try{files=await readdir(dir);}catch(error){
   if(error.code!=='ENOENT')throw error;
-  t.skip('apps/baink/catalogue is omitted from the public source export pending publication permission');return;
+  // The public export includes the real catalogue records at this path.
+  // A missing fallback must fail rather than silently losing the comparison.
+  dir=new URL('../../../public/projects/',import.meta.url);files=await readdir(dir);
  }
  let n=0;
  for(const file of files.filter(f=>/^domain-\d+\.json$/.test(f))){
@@ -19,7 +21,7 @@ test('pilot search areas match every OPP and PRB catalogue entry',async(t)=>{
  assert.equal(n,21600);
 });
 
-test('pilot search areas handle group boundaries and invalid project IDs without the external catalogue',()=>{
+void test('pilot search areas handle group boundaries and invalid project IDs without the external catalogue',()=>{
  assert.equal(PROJECT_AREAS.length,450);
  for(const prefix of ['OPP-','PRB-','P-OPP-','P-PRB-']){
   for(const [id,area] of [
