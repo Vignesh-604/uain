@@ -34,3 +34,8 @@ test('insight governance change has consistent visible, structured and sitemap d
  const map=fs.readFileSync('public/sitemap.xml','utf8');
  assert.ok(map.includes('<loc>https://uain.global'+path+'</loc><lastmod>2026-11-16</lastmod>'));
 });
+
+test('homepage contains the exact UAIN-specific Bing ownership proof in its head',()=>{
+ const head=fs.readFileSync('dist/client/index.html','utf8').split('</head>')[0];
+ assert.match(head,/<meta name="msvalidate\.01" content="570530BEEE384EE71F1852F8040785AD"\s*\/?\s*>/);
+});
