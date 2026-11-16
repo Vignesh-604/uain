@@ -1,6 +1,6 @@
 # Remaining discovery work
 
-Updated 16 November 2026. Checkout D:\uain; branch codex/uain-discovery-20261116; publication account verified as Vignesh-604. No merge or production deployment performed.
+Updated 16 November 2026. Checkout D:\uain; follow-up branch codex/uain-discovery-live-followup-20261116; publication account verified as Vignesh-604. The narrow live Bing ownership repair is deployed; the complete discovery rollout is in progress in the working repository.
 
 ## Verified pre-release checks
 
@@ -23,7 +23,7 @@ The CI skips comprise six valuation comparisons whose documents are absent from 
 ## Release and post-publication work
 
 - [ ] Maintainer reviews and releases through the working repository's approved export/release path. No direct deployment from this public export; no merge to main by the agent.
-- [ ] Confirm Bing's exact proof is live, complete UAIN-only ownership verification, then inspect Bing reports and submit live canonical sitemaps.
+- [x] Confirm Bing's exact proof is live, complete UAIN-only ownership verification, then inspect Bing reports and submit live canonical sitemaps. Verified 16 November 2026: all three maps Success, 149 discovered URLs, zero errors/warnings.
 - [ ] After the changed maps/pages are live, submit them and genuinely changed URLs through Search Console/IndexNow, retain receipts and verify representative crawls. Submission is not indexing.
 - [ ] Check post-rollout map acceptance, exclusions, impressions and citations at 7/14/28 days; no automations scheduled.
 
@@ -34,9 +34,9 @@ Owner-approved legal/contact pages and additional research case studies remain o
 - [x] GSC accepted the current public-record sitemap: success, 122 discovered URLs.
 - [x] GSC accepted the existing task sitemap index; it currently advertises only the /tasks index, not central details.
 - [x] Google accepted one verified currently-open task into its priority indexing queue; actual crawling/indexing remains pending.
-- [ ] Production rollout mismatch: PR #2 is merged into the export repository, but /about and /sitemap-index.xml still return 404; the new Bing meta proof is absent and /BingSiteAuth.xml returns 404. /research still redirects to http://uain.global:8080/research/. The live build marker reports commit 11b87c8715f0c8d00e55c7d4e22ec14fe5180377, built 2026-11-16T14:23:24Z.
-- [ ] Release the reviewed code through the working repository, then verify live proof and complete Bing/IndexNow plus repaired-map submissions. The public export contains only the fork test workflow, not a production deploy workflow.
+- [x] Resolved the Bing ownership part of the production mismatch: exact tag deployed and verified in compressed and identity HTML. Existing page content otherwise preserved by this narrow repair.
+- [ ] Release the reviewed complete discovery code through the working repository branch codex/uain-discovery-production-20261116, verify all public pages and repaired maps, then submit the newly live aggregate sitemap and changed URLs. The earlier export merge alone did not deploy them.
 
-No Bing verification, IndexNow receipt or indexing success is claimed. UAIN-only browser scope preserved; other properties, users and browsing data were not accessed or changed.
+Bing verification is complete. IndexNow accepted the changed homepage with HTTP 202 at 2026-11-16T17:12:20Z; indexing and provider verification are asynchronous. UAIN-only browser scope preserved; other properties, users and browsing data were not accessed or changed.
 
 - [x] Bounded live crawl of all 147 distinct URLs currently advertised by the three existing maps: all returned 200 and none carried noindex. This does not include the new routes still returning 404 or imply search indexing.

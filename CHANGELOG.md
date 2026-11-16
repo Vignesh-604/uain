@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### 2026-11-16 — live Bing ownership and IndexNow follow-up
+
+- Deployed the exact operator-provided Bing homepage tag in the existing production web image, including regenerated precompressed HTML; verified it before the body for both compressed and identity responses.
+- Completed UAIN-only Bing ownership verification. Bing reports all three submitted live sitemaps as Success, 149 discovered URLs, zero errors and zero warnings.
+- Hosted a dedicated read-only IndexNow proof and verified its exact public bytes. The reviewed CLI received HTTP 202 for the changed homepage at 2026-11-16T17:12:20Z; provider verification and indexing remain pending.
+- Found the working production repository and verified Vignesh-604 access. Ported the reviewed code onto codex/uain-discovery-production-20261116 there; preserved private source and the frozen worker. Its new sources also remain in the public export allowlist.
+- Full working-source checks exposed a removed signer checksum in llms.txt. Restored the exact public artifact checksum while retaining local key handling; the existing signer integration test now passes. Both backend modes, upgrade rehearsal, production image builds, real Nginx routing and 23 built-HTML/IndexNow checks passed; the complete platform check is rerunning before production release.
+
 ### 2026-11-16
 
 - Established the explicitly requested local Windows checkout at D:\uain and local branch codex/uain-discovery-20261116; no push or deployment.
