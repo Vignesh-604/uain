@@ -18,7 +18,9 @@ let sourceCache={rows:new Map<string,any>(),bytes:0},catalogCache=new Map<string
 const responseCache=new Map<string,{value:any;bytes:number;expires:number}>(),inFlight=new Map<string,Promise<any>>();let responseBytes=0;
 async function sourceVersion(){const r=(await pool.query('SELECT count(*)::text AS n,max(published_at)::text AS last FROM native_publications WHERE epoch=$1',[nativeConfig()!.genesisHash])).rows[0];return JSON.stringify([r.n,r.last])}
 const listPath=/^\/api\/(projects|tasks|directory|contributions|members)$/;
-const detailPath=/^\/api\/(projects|tasks|directory|contributions|members)\/([A-Za-z0-9][A-Za-z0-9._:-]{0,255})(?:\/(claims|tasks|members))?$/;
+// A claim is read one at a time (17 November 2026): verify-ledger.mjs recomputes each claim revision
+// and review the ledger committed from /api/claims/CL-n. There is no claim list route.
+const detailPath=/^\/api\/(projects|tasks|directory|contributions|members|claims)\/([A-Za-z0-9][A-Za-z0-9._:-]{0,255})(?:\/(claims|tasks|members))?$/;
 const projectSubPath=/^\/api\/projects\/[A-Za-z0-9][A-Za-z0-9._:-]{0,255}\/(claims|tasks|members)$/;
 const sitePath=(url:URL)=>url.searchParams.get('discover')!=='1'&&(listPath.test(url.pathname)||['/api/stats','/api/directory/map'].includes(url.pathname)||/^\/api\/projects\/[A-Za-z0-9][A-Za-z0-9._:-]{0,255}(?:\/(claims|tasks|members))?$/.test(url.pathname));
 /** Browse views (lists, discovery, stats, the map and project pages) answer from the last proved
@@ -43,7 +45,7 @@ export async function nativePublicSiteSnapshot(url:URL){
  const result=presentPublicResult(url,hit.value,new Date(hit.verifiedAt).toISOString());return{...result,body:{...result.body,site_snapshot:{verified_at:new Date(hit.verifiedAt).toISOString(),refresh_pending:refreshNeeded||!!warmPending,authoritative:false}}};
 }
 let lastCheckpointAt=0;
-const kinds:any={projects:'project',tasks:'task',directory:'participant',contributions:'contribution',members:'member'};
+const kinds:any={projects:'project',tasks:'task',directory:'participant',contributions:'contribution',members:'member',claims:'claim'};
 function pagination(url:URL,rows:any[],name:string){const page=Number(url.searchParams.get('page')??1),size=Number(url.searchParams.get('page_size')??20);if(!Number.isInteger(page)||page<1||page>100000||!Number.isInteger(size)||size<1||size>200)throw Error('bounded public page required');return{count:rows.length,page,page_size:size,pages:Math.max(1,Math.ceil(rows.length/size)),[name]:rows.slice((page-1)*size,page*size)}}
 async function checkpoint(config:any){
  const inspect=async()=>{const baseline=await checkpointHead(config),[epochs,journalRows]=await Promise.all([pool.query('SELECT * FROM native_epochs WHERE epoch=$1',[config.genesisHash]),pool.query('SELECT kind,cursor FROM native_journal_cursors WHERE epoch=$1',[config.genesisHash])]);return{baseline,s:baseline.state,e:epochs.rows[0],journals:journalRows.rows}};
@@ -73,8 +75,8 @@ async function buildNativePublicData(url:URL,visibility:NativePublicVisibility,b
    const rows=[];for(const id of await reader.ids('member')){const m=await reader.member(id,false);if(!m)continue;const own=agents.get(m.address)??[];if(m.licence?.status==='unclaimed'&&!own.length)continue;rows.push(memberRow(m,own))}
    body={count:rows.length,members:rows};
   }else{
-  const needed=kind==='project'?['project','task','contribution','claim','participant','member','amendments','claim_reviews','claim_revisions','verifications','prior_art_challenges','benevolence_flags','kpi_resolutions']:kind==='task'||kind==='contribution'?['project','task','contribution','verifications','prior_art_challenges','benevolence_flags','kpi_resolutions']:['participant','member'];if(!detail||!['task','contribution'].includes(kind))await reader.warm(needed);
-  const get=async(id:string)=>kind==='project'?reader.project(id,!list):kind==='task'?reader.task(id):kind==='contribution'?reader.contribution(id):kind==='member'?reader.member(id):reader.participant(id,!!detail);
+  const needed=kind==='claim'?['project','claim','claim_reviews','claim_revisions']:kind==='project'?['project','task','contribution','claim','participant','member','amendments','claim_reviews','claim_revisions','verifications','prior_art_challenges','benevolence_flags','kpi_resolutions']:kind==='task'||kind==='contribution'?['project','task','contribution','verifications','prior_art_challenges','benevolence_flags','kpi_resolutions']:['participant','member'];if(!detail||!['task','contribution'].includes(kind))await reader.warm(needed);
+  const get=async(id:string)=>kind==='claim'?reader.claim(id):kind==='project'?reader.project(id,!list):kind==='task'?reader.task(id):kind==='contribution'?reader.contribution(id):kind==='member'?reader.member(id):reader.participant(id,!!detail);
   if(detail){body=await get(detail[2]);if(body&&kind==='task'&&url.searchParams.get('discover')==='1'){const discoveryProject=await reader.discoveryProject(body.project_id);let discovery=nativeTaskDiscovery(body,discoveryProject,body.status==='open'?'open':'all',initial.header_time);
   // A detail page of an original-policy task that is no longer open (answered, closed, waiting for
   // checks) reads as history (16 November 2026): its lifecycle status is the filter that admits it
