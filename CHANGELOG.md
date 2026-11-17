@@ -4,6 +4,9 @@
 
 ### 2026-11-17
 
+- Served claim records at `/api/claims/CL-n` (the route answered HTTP 409 under native authority) and served claim revision ids as the numbers the ledger committed instead of strings, so `verify-ledger.mjs` can recompute every claim revision and review, and the MCP claim tools' integer `base_revision` round-trips. Native proposal ids (`native:...`) stay strings. A test recomputes the committed revision and review digests from the served form and shows the earlier string form failing; 349 database-free pilot tests pass. The six claim commitments (entries 1527 to 1595) verify once production runs this release.
+- README: the status line now says UAIN is live at uain.global; the 409 verification limit is replaced by how claims are served. Other pages still describe a testing phase (17 files, including the site's about, governance, network and limits pages, BAINK's guide answers and MCP text, `llms.txt`, `SECURITY.md`); they were not changed here.
+
 - Fixed the rollout waiter to distinguish terminal old pods from running old replicas. Reproduced the staging timeout with Succeeded/Failed regression cases; active old pods and unavailable new replicas still block rollout.
 
 - Made this the canonical application repository; retained public history, registry metadata and public-only test improvements while synchronizing the latest signer checksum guidance and deployment classification from the former private source.
