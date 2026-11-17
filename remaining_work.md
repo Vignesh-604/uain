@@ -1,8 +1,8 @@
 # Repository cutover — 17 November 2026
 
-- [ ] Verify the first production release built from this public repository.
-- [ ] Verify staging, scheduled operations and runner ownership under the private infrastructure repository.
-- [ ] Disable and archive the former private working repository after the cutover passes.
+- [x] Verify the first production release built from this public repository (17 November 2026).
+- [x] Verify staging, backup and anchoring workflows, signed-root publication and runner ownership under the new repositories (17 November 2026).
+- [x] Disable and archive the former private working repository after verified cutover (17 November 2026).
 
 # Remaining discovery work
 

@@ -7,7 +7,7 @@
 - Fixed the rollout waiter to distinguish terminal old pods from running old replicas. Reproduced the staging timeout with Succeeded/Failed regression cases; active old pods and unavailable new replicas still block rollout.
 
 - Made this the canonical application repository; retained public history, registry metadata and public-only test improvements while synchronizing the latest signer checksum guidance and deployment classification from the former private source.
-- Moved privileged release ownership to a separate private operations repository. Releases check out an exact public source commit; public CI uses disposable hosted runners without production access. Migration remains in progress until the first private-controller release and live source checks pass.
+- Moved privileged release ownership to a separate private operations repository. Releases check out an exact public source commit; public CI uses disposable hosted runners without production access. Migration completed: staging and production now run the public source, with release ownership in the private infrastructure repository. Both backend modes and site checks passed; web/API build metadata and public health checks were verified. The former private working repository is archived.
 
 - Updated `public/server.json` for the MCP Registry listing `global.uain/network`: version `0.1.0` to `0.3.0` (the live server reports `0.3.0-pilot`), a plain 98-character description replacing "AI-operated campaign; joining needs permission", and the website link without its `?ref=` tracking code. Not yet republished to the registry; that needs the key behind `/.well-known/mcp-registry-auth`.
 
