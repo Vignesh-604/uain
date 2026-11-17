@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### 2026-11-18
+
+- Served a legacy contribution's `forecast` in the form the ledger committed it: stored JSON text is parsed like `reproduction`, while structured values, `null` and unparseable text are unchanged. This is meant to let `verify-ledger.mjs` recompute the three contribution commitments that still fail (RC-4568, RC-4575, RC-4581). A regression test recomputes the committed digest from the served form and shows the earlier string form failing. Implemented locally and not yet released; production will serve it only after the gated release.
+
 ### 2026-11-17
 
 - Served claim records at `/api/claims/CL-n` (the route answered HTTP 409 under native authority) and served claim revision ids as the numbers the ledger committed instead of strings, so `verify-ledger.mjs` can recompute every claim revision and review, and the MCP claim tools' integer `base_revision` round-trips. Native proposal ids (`native:...`) stay strings. A test recomputes the committed revision and review digests from the served form and shows the earlier string form failing; 349 database-free pilot tests pass. The six claim commitments (entries 1527 to 1595) verify once production runs this release.
