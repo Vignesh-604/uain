@@ -69,7 +69,7 @@ trap 'rm -f "$KEY"' EXIT
 # (ops/check-inherit.sh has the exact rule and why). The fast local checks still run.
 if [ "$MODE" = scope ] && inherited=$(bash ops/check-inherit.sh "$RECORDS" 2>/dev/null); then
   from=${inherited%% *}; why=${inherited#* }
-  node ops/docs/render-status.mjs --check
+  if [ -f docs/releases/README.md ]; then node ops/docs/render-status.mjs --check; else echo "Release evidence is maintained in the private operations repository."; fi
   node ops/ci/test-globs-check.mjs apps/baink
   mkdir -p "$RECORDS"
   printf '{"commit":"%s","inherited_from":"%s","reason":"%s","passed_at":"%s"}\n' "$HEAD" "$from" "$why" "$(date -u +%FT%TZ)" > "$RECORDS/$HEAD.json"
@@ -91,7 +91,7 @@ if [ "$MODE" = scope ]; then
     if git diff --no-renames --name-only "$c" HEAD | touches_check; then break; fi
     since=$(git diff --name-only "$c" HEAD | node ops/ci-scope/classify.mjs | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).mode)')
     if [ "$since" = prose ]; then
-      node ops/docs/render-status.mjs --check
+      if [ -f docs/releases/README.md ]; then node ops/docs/render-status.mjs --check; else echo "Release evidence is maintained in the private operations repository."; fi
       mkdir -p "$RECORDS"
       printf '{"commit":"%s","inherited_from":"%s","reason":"documentation-only since","passed_at":"%s"}\n' "$HEAD" "$c" "$(date -u +%FT%TZ)" > "$RECORDS/$HEAD.json"
       echo "CHECK PASSED for ${HEAD:0:10}: documentation-only since passed ${c:0:10}"
@@ -130,7 +130,7 @@ esac
 
 # 2. Fast local checks.
 echo "== local: release status, BAINK test globs"
-node ops/docs/render-status.mjs --check
+if [ -f docs/releases/README.md ]; then node ops/docs/render-status.mjs --check; else echo "Release evidence is maintained in the private operations repository."; fi
 node ops/ci/test-globs-check.mjs apps/baink
 
 # 3. Remote suites.

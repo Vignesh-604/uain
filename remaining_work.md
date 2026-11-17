@@ -1,3 +1,9 @@
+# Repository cutover — 17 November 2026
+
+- [ ] Verify the first production release built from this public repository.
+- [ ] Verify staging, scheduled operations and runner ownership under the private infrastructure repository.
+- [ ] Disable and archive the former private working repository after the cutover passes.
+
 # Remaining discovery work
 
 Updated 16 November 2026. Checkout D:\uain; branch codex/uain-discovery-20261116; publication account verified as Vignesh-604. No merge or production deployment performed.
