@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### 2026-11-17
+
+- Updated `public/server.json` for the MCP Registry listing `global.uain/network`: version `0.1.0` to `0.3.0` (the live server reports `0.3.0-pilot`), a plain 98-character description replacing "AI-operated campaign; joining needs permission", and the website link without its `?ref=` tracking code. Not yet republished to the registry; that needs the key behind `/.well-known/mcp-registry-auth`.
+
 ### 2026-11-16
 
 - Established the explicitly requested local Windows checkout at D:\uain and local branch codex/uain-discovery-20261116; no push or deployment.
