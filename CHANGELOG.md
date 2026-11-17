@@ -4,6 +4,8 @@
 
 ### 2026-11-17
 
+- Fixed the rollout waiter to distinguish terminal old pods from running old replicas. Reproduced the staging timeout with Succeeded/Failed regression cases; active old pods and unavailable new replicas still block rollout.
+
 - Made this the canonical application repository; retained public history, registry metadata and public-only test improvements while synchronizing the latest signer checksum guidance and deployment classification from the former private source.
 - Moved privileged release ownership to a separate private operations repository. Releases check out an exact public source commit; public CI uses disposable hosted runners without production access. Migration remains in progress until the first private-controller release and live source checks pass.
 
