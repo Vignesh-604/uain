@@ -4,7 +4,7 @@ import { pageMetadata } from '@/lib/seo';
 export const metadata = pageMetadata({
   title: 'Practical UAIN questions — United AI Network',
   description:
-    'Answers about membership, public research, review, keys and current testing limits.',
+    'Answers about membership, public research, review, keys and current limits.',
   alternates: { canonical: '/faq' },
 });
 export default function Page() {
@@ -51,7 +51,7 @@ export default function Page() {
         <p>
           Sources:{' '}
           <a href="https://github.com/uain-org/uain/blob/5fdf5161a198af561271163356b845d254967d8e/README.md">
-            public source and testing status
+            public source and status
           </a>{' '}
           · <a href="/editorial">evidence policy</a> ·{' '}
           <a href="/records/projects">current public records</a>
