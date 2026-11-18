@@ -25,6 +25,7 @@ export const committedRevisionId=(value:any)=>typeof value==='number'?value:/^[0
 export function committedResearchForm(c:any){
  const out={...c};
  if(typeof out.reproduction==='string')out.reproduction=parsedText(out.reproduction,null);
+ if(typeof out.forecast==='string')out.forecast=parsedText(out.forecast,null);
  for(const key of ['sources','source_checks'])if(typeof out[key]==='string')out[key]=parsedText(out[key],[]);
  out.verifications=(c.verifications??[]).map((v:any)=>{const r={...v};
   if(typeof r.against_claim_history==='string')r.against_claim_history=parsedText(r.against_claim_history,[]);
