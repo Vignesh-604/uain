@@ -58,7 +58,7 @@ test('record writes one deploy with the pointer as prior and is idempotent', () 
   assert.equal(main(argv, { root, run: () => assert.fail('no gh'), log: () => {} }), 0);
   const f = JSON.parse(fs.readFileSync(path.join(root, 'docs/releases/uain/ffffffff.json'), 'utf8'));
   assert.equal(f.prior, 'aaaaaaaa');
-  assert.equal(f.evidence[0], 'https://github.com/nuah-org/uain-universa/actions/runs/9');
+  assert.equal(f.evidence[0], 'https://github.com/uain-org/uain/actions/runs/9');
   assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'docs/releases/current.json'), 'utf8')).current.uain, 'ffffffff');
 });
 
