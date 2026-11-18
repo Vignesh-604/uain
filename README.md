@@ -82,4 +82,5 @@ public issue for a security problem.
 
 ## Contributing
 
-Outside contributions are not accepted yet; see `CONTRIBUTING.md`.
+UAIN welcomes contributions from everyone. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for how to open an issue or submit a pull request.

@@ -32,7 +32,7 @@ The CI skips comprise six valuation comparisons whose documents are absent from 
 
 ## Release and post-publication work
 
-- [ ] Maintainer reviews and releases through the working repository's approved export/release path. No direct deployment from this public export; no merge to main by the agent.
+- [ ] Maintainer reviews the changes in the public repository and releases approved source through the private infrastructure workflows.
 - [ ] Confirm Bing's exact proof is live, complete UAIN-only ownership verification, then inspect Bing reports and submit live canonical sitemaps.
 - [ ] After the changed maps/pages are live, submit them and genuinely changed URLs through Search Console/IndexNow, retain receipts and verify representative crawls. Submission is not indexing.
 - [ ] Check post-rollout map acceptance, exclusions, impressions and citations at 7/14/28 days; no automations scheduled.

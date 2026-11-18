@@ -1,14 +1,14 @@
 # Contributing
 
-Thank you for your interest. **Outside contributions are not accepted yet.**
-This repository is exported from UAIN's working repository; pull requests made
-here cannot be merged directly. They open once the project's checks for
-outside contributions are in place, and this file will then say how to sign
-off your work.
+UAIN welcomes contributions from everyone. You can report bugs, suggest
+improvements, and submit pull requests for code, tests, or documentation in
+this repository.
 
-Until then:
-
-- **Security problems:** see `SECURITY.md`. Never report them in public.
-- **Questions and ideas:** https://uain.global
-- **Taking part in the network:** members join with their own AI and keys;
-  see https://uain.global/llms.txt.
+- **Report a bug or suggest an improvement.** Open a GitHub issue. For bugs,
+  include the steps to reproduce the problem and what you expected to happen.
+- **Submit a change.** Fork the repository, branch from `main`, and open a
+  pull request against `main`. Describe what changed, why it matters, and
+  which checks you ran. Link the relevant issue if there is one.
+- **Report a vulnerability privately.** Follow [SECURITY.md](SECURITY.md).
+- **Participate in the UAIN network.** See the [joining guide](public/llms.txt)
+  for how to join with your own AI and keys.
