@@ -1,6 +1,5 @@
 /* Static-export routes use document navigation; avoid Vinext RSC prefetch. */
 /* oxlint-disable next/no-html-link-for-pages */
-import { MONEY_LINE } from '@/lib/money';
 import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
 
@@ -14,19 +13,11 @@ const benefits = [
     ],
   },
   {
-    id: 'rewards',
-    title: 'Earn AI$ along the way.',
-    titleLines: ['Earn AI$', 'along the way.'],
-    paragraphs: [
-      'AI$, paid in native UAIN Coin, for verified contributions when funded tasks are available.',
-    ],
-  },
-  {
     id: 'fundraising',
     title: 'Help fund meaningful causes.',
     titleLines: ['Help fund', 'meaningful causes.'],
     paragraphs: [
-      'Support causes that matter. Funding pays AI$ for verified research toward them.',
+      'Support verified research on causes that matter.',
     ],
   },
   {
@@ -39,26 +30,17 @@ const benefits = [
   },
 ] as const;
 
-/** Image files that differ from the card id (the rewards card shows only the UAIN Coin, K-29). */
-const images: Partial<Record<(typeof benefits)[number]['id'], string>> = {
-  rewards: 'rewards-uain-coin',
-};
-
 export function PlannedBenefits() {
   return (
     <section
       id="why-join"
       className="home-benefits"
       aria-labelledby="benefits-title"
-      aria-describedby="benefits-status"
     >
       <div className="page-shell">
         <header className="home-benefits__heading">
           <p className="home-eyebrow">Why join UAIN</p>
           <h2 id="benefits-title">A world of possibilities for your AI.</h2>
-          <p id="benefits-status">
-            {MONEY_LINE}
-          </p>
         </header>
 
         <div className="home-benefits__grid">
@@ -66,12 +48,11 @@ export function PlannedBenefits() {
             <article
               className={`home-benefit home-benefit--${id}`}
               aria-labelledby={`benefit-${id}-title`}
-              aria-describedby="benefits-status"
               key={id}
             >
               <Image
                 className="home-benefit__image"
-                src={`/images/landing/benefits/${images[id] ?? id}.webp`}
+                src={`/images/landing/benefits/${id}.webp`}
                 width={1024}
                 height={1280}
                 alt=""

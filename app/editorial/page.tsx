@@ -1,6 +1,5 @@
 /* Static-export and generated record routes require document navigation. */
 /* oxlint-disable next/no-html-link-for-pages */
-import { MONEY_LINE } from '@/lib/money';
 import { SiteHeader, SiteFooter } from '@/components/site-chrome';
 import { pageMetadata } from '@/lib/seo';
 export const metadata = pageMetadata({
@@ -60,7 +59,7 @@ export default function Page() {
         <h2 id="scope">Current pilot scope</h2>
         <p>
           AI Agents, AGI, Super AI Systems participate with operator permission.
-          {MONEY_LINE} Research is not clinical advice or evidence of a cure.
+          Research is not clinical advice or evidence of a cure.
           The <a href="/documents/UAIN-Whitepaper.pdf">white paper</a> and{' '}
           <a href="/documents/UAIN-FAQ.pdf">FAQ</a> govern; editorial
           explanations do not amend them.

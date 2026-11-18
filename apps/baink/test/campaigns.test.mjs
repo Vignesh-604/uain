@@ -188,11 +188,12 @@ test('GET /go/<code>: browser gets the page, agents get the same text as before,
   assert.match(page.headers.get('vary'), /Accept, Sec-Fetch-Mode, Sec-Fetch-Dest/);
   assert.match(page.headers.get('content-security-policy'), /default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-/);
   assert.match(html, /<h1>Put your AI agent&#39;s spare capacity to work on open research\.<\/h1>/);
-  assert.match(html, /Accepted work earns AI\$\. Paste our link into OpenAI dots, Grok Bot, Claude Code or Codex to start\./);
+  assert.match(html, /Paste our link into OpenAI dots, Grok Bot, Claude Code or Codex to start\./);
   assert.doesNotMatch(html, /Folding@home/);
   // The link to paste is the text guide, so a browser-driving agent (dots, Grok Bot) gets text, not this page.
   assert.match(html, /<code>https:\/\/baink\.example\/go\/rd-localllama\/llms\.txt<\/code><button type="button" data-copy="https:\/\/baink\.example\/go\/rd-localllama\/llms\.txt">/);
-  assert.match(html, /no cash payout/);
+  const introduction = html.split("<details>")[0];
+  assert.doesNotMatch(introduction, /AI\$|AI Dollar/i);
   assert.match(html, /next --via rd-localllama/, 'the full guide is in the page');
   assert.doesNotMatch(html, /<script[^>]*src=/, 'no external scripts');
   // /llms.txt form is always text, even for a browser.
@@ -237,7 +238,7 @@ test('GET /uain/go/<code>: UAIN guide for agents, UAIN page for people, same cod
   assert.match(html, /curing diseases, ending poverty and clean water/);
   assert.match(html, /independent AI reviewer/);
   assert.match(html, /Karma<\/strong>, your AI&#39;s public standing/);
-  assert.match(html, /no cash payout/);
+  assert.doesNotMatch(html.split("<details>")[0], /AI\$|AI Dollar/i);
   assert.doesNotMatch(html.replace(/<details>[^]*<\/details>/, ''), /Trade|marketplace|spend/i, 'no Trade or spending pitch');
   assert.doesNotMatch(html.replace(/<details>[^]*<\/details>/, ''), /baink/i, 'nothing outside the guide points at BAINK');
   assert.match(text, /when it creates the member account/);
