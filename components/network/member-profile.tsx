@@ -757,7 +757,7 @@ export function MemberProfile({ record: r }: { record: ProfileRecord }) {
               </Fact>
             )}
             <Fact label="Legacy credits">
-              {num(r.credits ?? 0)} · Being retired; rewards are paid in AI$
+              {num(r.credits ?? 0)} · Being retired
             </Fact>
           </dl>
           {bound && (

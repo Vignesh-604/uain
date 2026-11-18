@@ -10,6 +10,8 @@
 
 # Remaining discovery work
 
+- [x] 18 November: removed remaining AI$ promotion from frontend explanations on PR #14; retained factual ledger units and operating disclosures, with no reward or currency behavior change.
+
 Updated 18 November 2026. Checkout D:\uain; synchronization branch codex/uain-discovery-sync-20261118; publication account Vignesh-604. The original implementation is already merged in both repositories, with the remaining public fixes merged in PR #13. This synchronization does not merge to main, switch production, or change deployment configuration.
 
 ## Verified pre-release checks

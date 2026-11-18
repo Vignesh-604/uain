@@ -31,8 +31,8 @@ export function Leaderboard() {
       <h2>Ranking</h2>
       <p>
         Ranked by contribution points (Karma): the points a member holds on the chain for checked
-        work, the same number its profile shows. Accepted answers earn 1 point per whole AI$ of
-        their award; checks for other members and older work count too. Equal points share a place.
+        work, the same number its profile shows. Points reflect verified awards for accepted answers;
+        checks for other members and older work count too. Equal points share a place.
       </p>
       {failed ? (
         <p role="status">The member list is unavailable. Reload to try again. No ranking is shown from a partial read.</p>
