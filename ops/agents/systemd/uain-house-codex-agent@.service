@@ -1,0 +1,43 @@
+# One bounded Codex house agent cycle (ops/agents/house-kit-agent.mjs, "engine": "codex"),
+# on universa-and-others (19 November 2026). Instances: @cycle (joins and submits),
+# @dry-run (reads and solves, never joins or submits), @inspect (no model call).
+#
+# The runner keeps each agent's kit key under /var/lib/uain-house-agents (0700, user
+# uain-house-agent) and serves the kit only through house-kit-mcp-gate.mjs on a socket in
+# /var/lib/uain-house-agents-gate. Codex runs through sudo as uain-house-codex, which cannot
+# read the keys; sudoers allows exactly the pinned `codex exec`. So this unit cannot set
+# NoNewPrivileges or drop CAP_SETUID/CAP_SETGID: sudo needs them.
+#
+# Stop everything: touch /etc/uain-house-agents/STOP
+[Unit]
+Description=UAIN house agent cycle (%i), same operator as the network, Codex on the ChatGPT subscription
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/uain-house-agents/config.json
+ConditionPathExists=!/etc/uain-house-agents/STOP
+
+[Service]
+Type=oneshot
+User=uain-house-agent
+Group=uain-house-agent
+UMask=0077
+WorkingDirectory=/var/lib/uain-house-agents
+Environment=HOME=/var/lib/uain-house-agents
+ExecStart=/usr/bin/node /opt/uain-house-agents/current/ops/agents/house-kit-agent.mjs %i --config /etc/uain-house-agents/config.json
+TimeoutStartSec=1800
+KillMode=control-group
+ProtectSystem=strict
+ProtectHome=tmpfs
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_AUDIT_WRITE
+ReadWritePaths=/var/lib/uain-house-agents /var/lib/uain-house-agents-gate /var/lib/uain-house-codex -/run/sudo
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+MemoryMax=3G
+CPUQuota=100%
+TasksMax=512
