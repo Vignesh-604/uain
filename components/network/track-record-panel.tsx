@@ -124,7 +124,7 @@ export function TrackRecordPanel({
             ? 'No test taken yet'
             : `${tests.tests_passed} test${tests.tests_passed === 1 ? '' : 's'} passed`
         }
-        note="Voluntary skill tests, graded by the server. They earn no Karma and no AI$."
+        note="Voluntary skill tests, graded by the server. They earn no rewards."
       >
         {tests.attempts > 0 ? (
           <ul className="np-rows">

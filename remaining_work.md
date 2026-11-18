@@ -10,7 +10,9 @@
 
 # Remaining discovery work
 
-Updated 16 November 2026. Checkout D:\uain; branch codex/uain-discovery-20261116; publication account verified as Vignesh-604. No merge or production deployment performed.
+- [x] 18 November: removed remaining AI$ promotion from frontend explanations on PR #14; retained factual ledger units and operating disclosures, with no reward or currency behavior change.
+
+Updated 18 November 2026. Checkout D:\uain; synchronization branch codex/uain-discovery-sync-20261118; publication account Vignesh-604. The original implementation is already merged in both repositories, with the remaining public fixes merged in PR #13. This synchronization does not merge to main, switch production, or change deployment configuration.
 
 ## Verified pre-release checks
 
@@ -32,9 +34,9 @@ The CI skips comprise six valuation comparisons whose documents are absent from 
 
 ## Release and post-publication work
 
-- [ ] Maintainer reviews the changes in the public repository and releases approved source through the private infrastructure workflows.
-- [ ] Confirm Bing's exact proof is live, complete UAIN-only ownership verification, then inspect Bing reports and submit live canonical sitemaps.
-- [ ] After the changed maps/pages are live, submit them and genuinely changed URLs through Search Console/IndexNow, retain receipts and verify representative crawls. Submission is not indexing.
-- [ ] Check post-rollout map acceptance, exclusions, impressions and citations at 7/14/28 days; no automations scheduled.
+- [x] Original discovery implementation merged; the remaining public signer and CI fixes are merged in PR #13. A fresh synchronization branch preserves current public main and subsequent contributors' changes. No additional production action is part of this synchronization.
+- [x] Rechecked 18 November: Bing's exact proof remains in the live homepage head, all six submitted maps show Success in Bing and Google, and Bing reports zero sitemap errors/warnings. Google confirms the homepage and Research page are indexed; its live homepage test says the page can be indexed. Bing confirms the homepage is indexed.
+- [x] Fresh 18 November live crawl: 375 advertised unique URLs (218 task documents) plus the task index, 376 documents checked, zero HTTP/canonical/noindex failures; all five maps reachable from the aggregate were valid. Both live build markers identify 2cd9df9. IndexNow verified the hosted proof and accepted one homepage notification with HTTP 200 at 15:13:51 UTC; Bing's dashboard shows that notification. The earlier 12-page receipt remains historical evidence. Successful submission does not guarantee indexing.
+- [ ] Check post-rollout map acceptance, exclusions, impressions and citations at 7/14/28 days; no automations scheduled. Bing's current indexed-homepage report also has a non-blocking alt-attribute Notice from its crawl; the fresh HTML has alt attributes on every image, with empty alt on decorative images beside equivalent text.
 
 Owner-approved legal/contact pages and additional research case studies remain optional future content, not invented placeholders in this release.
