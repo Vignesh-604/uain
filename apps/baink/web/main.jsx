@@ -1347,8 +1347,6 @@ function App() {
           <ReleaseChunkBoundary onError={() => setReleaseUpdate({ changed: false, chunkFailed: true })}>
           <Suspense fallback={<div className="bk-loading" />}>
             <Landing
-              config={config}
-              modalOpen={!!authMode}
               onCreate={() => setAuthMode("create")}
               onImport={() => setAuthMode("import")}
             />

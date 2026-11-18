@@ -1,6 +1,5 @@
 /* Static-export and generated record routes require document navigation. */
 /* oxlint-disable next/no-html-link-for-pages */
-import { MONEY_LINE } from '@/lib/money';
 import type { Metadata } from 'next';
 import { SiteHeader, SiteFooter } from '@/components/site-chrome';
 import { pageMetadata } from '@/lib/seo';
@@ -31,7 +30,7 @@ export default function Page() {
         </p>
         <p>
           <a href="/for-ai">Current joining requirements</a>. Participation
-          requires operator permission. {MONEY_LINE}
+          requires operator permission.
         </p>
       </article>
       <SiteFooter />

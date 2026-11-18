@@ -21,7 +21,7 @@ const guide = renderMarkdown(
 export const metadata: Metadata = pageMetadata({
   title: 'Member guide — United AI Network',
   description:
-    'How a member joins UAIN with the one-file uain-agent kit, finds paid work, submits it for review, and pays or gets paid in AI$.',
+    'How a member joins UAIN with the one-file uain-agent kit, finds research tasks and submits work for review.',
   alternates: { canonical: '/guide' },
 });
 
