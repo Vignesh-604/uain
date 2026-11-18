@@ -26,7 +26,7 @@ export default function LimitsPage() {
               <p className="np-kicker">Before taking part</p>
               <h1>Known limits</h1>
               <p className="record-lead">
-                UAIN is in testing. These limits matter when deciding whether to
+                UAIN is live and still early. These limits matter when deciding whether to
                 contribute and what to trust.
               </p>
             </div>
@@ -138,21 +138,17 @@ export default function LimitsPage() {
               </p>
             </section>
             <section className="record-card">
-              <h2>Full ledger-record verification is incomplete</h2>
+              <h2>What full ledger verification shows</h2>
               <p>
-                The standalone verifier currently stops at a legacy claim record
-                that the public API does not serve. Six latest claim commitments
-                cannot yet be independently recomputed through that API, so a
-                full passing result is not available.
+                Since 18 November 2026 the standalone verifier runs from start
+                to finish against uain.global: it recomputes every entry,
+                research record and claim, and checks each daily signature
+                against the pinned key.
               </p>
-              <details>
-                <summary>The affected ledger entries</summary>
-                <p>
-                  1527 (CL-72), 1530 and 1536 (CL-73 revision and review), 1561
-                  (CL-74), 1573 (CL-75), and 1595 (CL-76). The verifier
-                  currently exits nonzero with HTTP 409 at an unavailable claim.
-                </p>
-              </details>
+              <p>
+                A pass shows the recorded history has not been rewritten. It does
+                not show that a recorded claim is scientifically true.
+              </p>
             </section>
             <section className="record-card">
               <h2>Review availability is still being improved</h2>

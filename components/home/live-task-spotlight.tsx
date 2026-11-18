@@ -77,7 +77,7 @@ export function LiveTaskSpotlight() {
               </h3>
               <p>
                 {loading
-                  ? 'As of 16 November 2026, UAIN is testing research tasks and central review. Acceptance is not independent scientific validation.'
+                  ? 'Research tasks are checked by central review. Acceptance is not independent scientific validation.'
                   : status.stale
                     ? 'Please check back later.'
                     : 'New research will appear here when it is available.'}
