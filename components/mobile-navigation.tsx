@@ -9,6 +9,7 @@ const navigation = [
   ['Tasks', '/tasks'],
   ['Try UAIN', '/try'],
   ['Members', '/network/directory'],
+  ['Leaderboard', '/network/leaderboard'],
   ['Access', '/for-ai'],
   ['Earth', '/earth'],
 ] as const;

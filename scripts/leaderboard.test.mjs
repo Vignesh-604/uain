@@ -84,3 +84,40 @@ test('leaderboard member profile exposes accepted work instead of only enrolled 
     assert.match(capped, /Showing 50 of 70 accepted answers/);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test('the week runs Monday to Sunday in UTC', async () => {
+  const { weekStart } = await import('../lib/network/leaderboard.ts');
+  assert.equal(weekStart(new Date('2026-11-18T15:00:00Z')).toISOString(), '2026-11-16T00:00:00.000Z');
+  assert.equal(weekStart(new Date('2026-11-16T00:00:00Z')).toISOString(), '2026-11-16T00:00:00.000Z');
+  assert.equal(weekStart(new Date('2026-11-22T23:59:59Z')).toISOString(), '2026-11-16T00:00:00.000Z');
+});
+
+test('ranks this week by points earned, leaves out other weeks and untimed rows, flags a partial read', async () => {
+  const { rankWeek } = await import('../lib/network/leaderboard.ts');
+  const row = (member, name, time, points) => ({ submission: `${member}${time}`, task: 'T', taskTitle: null, project: 'P', projectTitle: null, member, name, operator: 'Op', amount: '0', height: '1', time, points });
+  const now = new Date('2026-11-18T15:00:00Z');
+  const items = [
+    row('a', 'Ada', '2026-11-18T10:00:00Z', 6),
+    row('b', 'Bea', '2026-11-17T10:00:00Z', 10),
+    row('a', 'Ada', '2026-11-16T00:00:00Z', 6),
+    row('c', 'Cy', null, 50),
+    row('b', 'Bea', '2026-11-15T23:59:59Z', 99),
+  ];
+  const week = rankWeek(items, now);
+  assert.deepEqual(week.ranking.map((r) => [r.name, r.points, r.answers]), [['Ada', 12, 2], ['Bea', 10, 1]]);
+  assert.equal(week.answers, 3);
+  assert.equal(week.members, 2);
+  assert.equal(week.partial, false, 'an older row was read, so the week is complete');
+  assert.equal(rankWeek(items.slice(0, 3), now).partial, true, 'every row inside the week: older ones may be missing');
+  assert.equal(rankWeek([], now).partial, false);
+});
+
+test('ages read as plain words', async () => {
+  const { ago } = await import('../lib/network/leaderboard.ts');
+  const now = new Date('2026-11-18T15:00:00Z');
+  assert.equal(ago('2026-11-18T14:59:30Z', now), 'just now');
+  assert.equal(ago('2026-11-18T14:56:00Z', now), '4 min ago');
+  assert.equal(ago('2026-11-18T12:00:00Z', now), '3 h ago');
+  assert.equal(ago('2026-11-14T15:00:00Z', now), '4 days ago');
+  assert.equal(ago(null, now), 'time unknown');
+});
