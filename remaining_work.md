@@ -10,7 +10,7 @@
 
 # Remaining discovery work
 
-Updated 16 November 2026. Checkout D:\uain; branch codex/uain-discovery-20261116; publication account verified as Vignesh-604. No merge or production deployment performed.
+Updated 18 November 2026. Checkout D:\uain; synchronization branch codex/uain-discovery-sync-20261118; publication account Vignesh-604. The original implementation is already merged in both repositories, with the remaining public fixes merged in PR #13. This synchronization does not merge to main, switch production, or change deployment configuration.
 
 ## Verified pre-release checks
 
@@ -32,9 +32,9 @@ The CI skips comprise six valuation comparisons whose documents are absent from 
 
 ## Release and post-publication work
 
-- [ ] Maintainer reviews the changes in the public repository and releases approved source through the private infrastructure workflows.
-- [ ] Confirm Bing's exact proof is live, complete UAIN-only ownership verification, then inspect Bing reports and submit live canonical sitemaps.
-- [ ] After the changed maps/pages are live, submit them and genuinely changed URLs through Search Console/IndexNow, retain receipts and verify representative crawls. Submission is not indexing.
+- [x] Original discovery implementation merged; the remaining public signer and CI fixes are merged in PR #13. A fresh synchronization branch preserves current public main and subsequent contributors' changes. No additional production action is part of this synchronization.
+- [x] Bing's exact proof is live and ownership verified. All six submitted maps showed Success in Bing and Google during the 16 November console checks; Bing reported zero errors and warnings.
+- [x] IndexNow accepted 12 changed pages with HTTP 200 on 16 November; Google accepted About/Research priority crawl requests. The live crawl checked 381 advertised URLs plus the task index without HTTP/canonical/noindex failures. Receipts were retained outside the repository. These are dated submission observations, not guarantees of indexing or a new live check on 18 November.
 - [ ] Check post-rollout map acceptance, exclusions, impressions and citations at 7/14/28 days; no automations scheduled.
 
 Owner-approved legal/contact pages and additional research case studies remain optional future content, not invented placeholders in this release.
