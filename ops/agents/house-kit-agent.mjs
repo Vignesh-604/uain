@@ -85,14 +85,15 @@ export function validateConfig(c) {
   need(Number.isInteger(c.timeoutMs) && c.timeoutMs >= 60000 && c.timeoutMs <= 1800000, 'config timeoutMs');
   need(Number.isInteger(c.maxTurns) && c.maxTurns >= 4 && c.maxTurns <= 80, 'config maxTurns');
   if (c.listRetryMs !== undefined) need(Number.isInteger(c.listRetryMs) && c.listRetryMs >= 0 && c.listRetryMs <= 120000, 'config listRetryMs');
+  if (c.kitToolNames !== undefined) need(['baink', 'uain'].includes(c.kitToolNames), 'config kitToolNames');
   if (c.minClaimable !== undefined) need(Number.isInteger(c.minClaimable) && c.minClaimable >= 1 && c.minClaimable <= 60, 'config minClaimable');
   if (c.limits !== undefined) need(['perCallUsd', 'dailyUsd', 'totalUsd'].every((k) => Number.isFinite(c.limits[k])), 'config limits');
   return c;
 }
 
 /** The instructions a house agent works from. Plain and fixed, so its digest identifies the policy. */
-export function housePrompt({ name, dryRun, offered = [], engine = 'claude' }) {
-  const tool = (t) => (engine === 'codex' ? 'uain_agent_' : 'baink_agent_') + t;
+export function housePrompt({ name, dryRun, offered = [], engine = 'claude', toolNames = 'baink' }) {
+  const tool = (t) => (engine === 'codex' || toolNames === 'uain' ? 'uain_agent_' : 'baink_agent_') + t;
   const web = engine === 'codex' ? 'web search' : 'WebSearch and WebFetch';
   const lines = [
     `You are "${name}", a house agent run by UAIN itself (the same operator as the network; this is disclosed on your public profile).`,
@@ -132,9 +133,12 @@ export const RESULT_SCHEMA = Object.freeze({
   },
 });
 
-export function claudeArgs({ config, agent, dryRun, prompt }) {
-  const allowed = [...READ_TOOLS, ...(dryRun ? [] : WRITE_TOOLS)].map((t) => `mcp__${KIT_SERVER}__${t}`);
-  const denied = [...FORBIDDEN_TOOLS, ...(dryRun ? WRITE_TOOLS : [])].map((t) => `mcp__${KIT_SERVER}__${t}`);
+/** Kit 0.2.23 renamed its tools baink_agent_* to uain_agent_*; Claude matches listed names, so allow and deny both. */
+const bothNames = (t) => [t, t.replace(/^baink_agent_/, 'uain_agent_')];
+
+export function claudeArgs({ config, agent, dryRun, prompt: _prompt }) {
+  const allowed = [...READ_TOOLS, ...(dryRun ? [] : WRITE_TOOLS)].flatMap(bothNames).map((t) => `mcp__${KIT_SERVER}__${t}`);
+  const denied = [...FORBIDDEN_TOOLS, ...(dryRun ? WRITE_TOOLS : [])].flatMap(bothNames).map((t) => `mcp__${KIT_SERVER}__${t}`);
   const mcp = { mcpServers: { [KIT_SERVER]: { type: 'stdio', command: config.node, args: [config.kit.path, 'mcp'], env: { UAIN_AGENT_HOME: join(agent.home, 'agent-home'), PATH: '/usr/bin:/bin' } } } };
   return ['--print', '--model', config.model, '--output-format', 'stream-json', '--verbose', '--json-schema', JSON.stringify(RESULT_SCHEMA),
     '--max-turns', String(config.maxTurns), '--tools', BUILTIN_TOOLS,
@@ -343,7 +347,7 @@ export async function cycle({ config, agentName, dryRun = false, runner = run, l
     if (before.claimableCount === null) return finish(config, { ...base, outcome: 'skipped', reason: 'task_list_unreadable', error: listError ?? before.statusError ?? before.historyError });
     if (before.claimableCount < minClaimable) return finish(config, { ...base, outcome: 'left_for_members', reason: `fewer than ${minClaimable} claimable tasks` });
     const offered = candidates(listed.tasks);
-    const prompt = housePrompt({ name: agent.name, dryRun, offered, engine });
+    const prompt = housePrompt({ name: agent.name, dryRun, offered, engine, toolNames: config.kitToolNames });
     if (engine === 'codex') return finish(config, await codexRun({ config, agent, dryRun, prompt, offered, base, before, runner, now }));
 
     const budget = openComputeBudget({ directory: join(config.stateDir, 'compute'), now, ...(config.limits ? { limits: config.limits } : {}) });

@@ -66,6 +66,14 @@ test('the model never gets payment, trade, key or shell tools; a dry run cannot 
     assert.match(value(live, '--disallowedTools'), new RegExp(t));
   }
   assert.doesNotMatch(value(live, '--allowedTools'), /Bash|Read|Write|Edit/);
+  assert.match(value(live, '--allowedTools'), /mcp__uain-agent__uain_agent_submit/, 'kit 0.2.23+ names are allowed too');
+  assert.doesNotMatch(value(dry, '--allowedTools'), /uain_agent_(submit|join)/);
+  for (const t of FORBIDDEN_TOOLS.map((x) => x.replace('baink_agent_', 'uain_agent_'))) {
+    assert.doesNotMatch(value(live, '--allowedTools'), new RegExp(t + '(,|$)'));
+    assert.match(value(live, '--disallowedTools'), new RegExp(t + '(,|$)'));
+  }
+  assert.match(housePrompt({ name: 'a', dryRun: false, toolNames: 'uain' }), /Call uain_agent_status/);
+  assert.match(housePrompt({ name: 'a', dryRun: false }), /Call baink_agent_status/, 'the default prompt is unchanged');
   const mcp = JSON.parse(value(live, '--mcp-config'));
   assert.equal(mcp.mcpServers['uain-agent'].env.UAIN_AGENT_HOME, join(config.agents[0].home, 'agent-home'));
   assert.match(housePrompt({ name: 'alpha', dryRun: true }), /DRY RUN: do not join or submit/);
