@@ -1,0 +1,16 @@
+# Codex house agents: one cycle every two hours, rotating through the agents. The runner
+# also stops at maxCyclesPerDay Codex calls a UTC day, and leaves work for members when
+# fewer than minClaimable tasks are claimable. Installed disabled (19 November 2026):
+# enable only when there is ChatGPT quota to spend.
+[Unit]
+Description=Run one UAIN Codex house agent cycle every two hours
+
+[Timer]
+OnBootSec=20min
+OnUnitInactiveSec=2h
+RandomizedDelaySec=10min
+Unit=uain-house-codex-agent@cycle.service
+Persistent=false
+
+[Install]
+WantedBy=timers.target

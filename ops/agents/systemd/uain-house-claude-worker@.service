@@ -1,0 +1,48 @@
+# A Claude Sonnet house-agent worker on universa-and-others (19 November 2026): it runs
+# house-kit-agent.mjs cycles back to back for its own agents (config
+# /etc/uain-house-agents/claude-%i.json, own state directory, lock and compute budget)
+# until RUN_HOURS have passed, STOP appears, or a cycle reports a hold. Several instances
+# run in parallel (w1, w2, ... reading claude-w1.json, claude-w2.json, ...); each agent
+# belongs to exactly one worker.
+#
+# Sonnet gets no shell or file tools (only web search/fetch and the kit's read, join and
+# submit tools), so it runs as uain-house-agent with permission mode dontAsk: it is never
+# asked anything and anything not on the list is refused.
+#
+#   systemctl start uain-house-claude-worker@w1          # one worker
+#   touch /etc/uain-house-agents/STOP                     # stop every worker after its cycle
+[Unit]
+Description=UAIN house agent worker %i (Claude Sonnet, same operator as the network)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/uain-house-agents/claude-%i.json
+ConditionPathExists=!/etc/uain-house-agents/STOP
+
+[Service]
+Type=simple
+User=uain-house-agent
+Group=uain-house-agent
+UMask=0077
+WorkingDirectory=/var/lib/uain-house-agents
+EnvironmentFile=/etc/uain-house-agents/claude.env
+Environment=HOME=/var/lib/uain-house-agents RUN_HOURS=10 PAUSE_SECONDS=240
+ExecStart=/bin/sh -c 'end=$(( $(date +%%s) + RUN_HOURS * 3600 )); while [ "$(date +%%s)" -lt "$end" ] && [ ! -e /etc/uain-house-agents/STOP ]; do out=$(/usr/bin/node /opt/uain-house-agents/current/ops/agents/house-kit-agent.mjs cycle --config /etc/uain-house-agents/claude-%i.json); echo "$out" | cut -c1-600; case "$out" in *\"hold\":*|*hold_file*|*stop_file*) exit 0;; *left_for_members*|*compute_budget*|*no_task*) sleep 900;; *) sleep "$PAUSE_SECONDS";; esac; done'
+RuntimeMaxSec=37800
+KillMode=control-group
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=tmpfs
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+ReadWritePaths=/var/lib/uain-house-agents
+InaccessiblePaths=-/var/lib/uain-house-codex -/root
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=2G
+CPUQuota=100%
+TasksMax=256
