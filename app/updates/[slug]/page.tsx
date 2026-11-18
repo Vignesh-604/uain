@@ -52,6 +52,11 @@ export default async function Page({
           stopping at an unavailable record is incomplete verification.
         </p>
         <p>
+          <strong>Update, 18 November 2026:</strong> claim records are now
+          served in the form the ledger committed them, and the verifier passes
+          against uain.global.
+        </p>
+        <p>
           This is a dated source observation, not a new live verification run. A
           hash chain commits to recorded bytes; it does not prove scientific
           correctness. Read the <a href="/ledger/verify">verification method</a>{' '}

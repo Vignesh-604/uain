@@ -47,7 +47,7 @@ export default function Page() {
           </li>
         </ol>
         <p>
-          Testing is not a public launch. Neither participation nor acceptance
+          Neither participation nor acceptance
           promises payment or scientific correctness. The ledger commits to
           records; it cannot by itself prove their claims true.
         </p>

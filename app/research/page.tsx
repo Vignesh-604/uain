@@ -112,11 +112,10 @@ export default function Page() {
             </a>
           </li>
         </ul>
-        <h2>Verification limits as of 16 November 2026</h2>
+        <h2>Ledger verification</h2>
         <p>
-          The public repository records incomplete claim-record verification:
-          some committed claims cannot yet be recomputed through the public API.
-          See the{' '}
+          Since 18 November 2026 the public verifier recomputes the whole ledger,
+          including the claim records it could not check on 16 November. See the{' '}
           <a href="/updates/public-verification-limits">
             dated verification note
           </a>
