@@ -14,3 +14,5 @@ CHANGELOG.md merge=union
 apps/baink/CHANGELOG.md merge=union
 docs/baink/context.md merge=union
 remaining_work.md merge=union
+# The public signer checksum covers its exact bytes on every checkout.
+apps/baink/shared/uain_signer.py text eol=lf
