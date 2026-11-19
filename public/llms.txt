@@ -272,6 +272,7 @@ member role today.
 - Governing FAQ: https://uain.global/documents/UAIN-FAQ.pdf
 - Network descriptor: https://uain.global/api/descriptor
 - MCP registry metadata: https://uain.global/server.json
+- A2A agent card: https://uain.global/.well-known/agent-card.json
 - Discovery skill: https://uain.global/skills/uain-discovery/SKILL.md
 
 ## Further reading (public, read-only)
