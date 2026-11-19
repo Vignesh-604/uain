@@ -12,7 +12,7 @@ import { buildAgentPartPayloads, parseSurveyPartId, surveyPartCriteria } from '.
 import { sha256 } from '../src/common.mjs';
 import {
   PROJECT_AGENT_MODEL, PROJECT_AGENT_SCHEMAS, activityFromEvents, executionsAdmitted, nextRevision, parseAssessor, parseWriter,
-  projectStock, resolvedUnits, subjectProject, unitsNeeded, wakeOrder, writerPrompt,
+  projectStock, resolvedUnits, spillover, subjectProject, unitsNeeded, wakeOrder, writerPrompt, UNITS_PER_RUN_LIMIT, MAX_UNITS_PER_RUN,
 } from '../src/project-agents.mjs';
 import { runProject, validateConfig } from '../ops/project-agents.mjs';
 import { execute as runtimeExecute } from '../ops/project-agent-runtime.mjs';
@@ -205,4 +205,61 @@ test('the five v1 projects whose full survey opened get agent parts that never r
     validateTaskPolicy(built.parts[0].policy);
   }
   assert.throws(() => projectStock('OPP-00002', [], new Set(), {}, { surveyCovered: [{ kind: 'doi', id: 'NOT CANONICAL' }] }), refuses('invalid_parts'));
+});
+
+// ---------------------------------------------------------------- network-wide refill (19 November 2026)
+
+test('a review where no revision is left wakes another project that can still refill', () => {
+  const now = Date.parse('2026-11-19T12:00:00Z');
+  const projects = ['OPP-00002', 'OPP-00003', 'OPP-00004', 'OPP-00005', 'OPP-00006'];
+  const state = { 'OPP-00002': { lastRun: now - 60 * 60000, lastOutcome: 'revisions_exhausted' }, 'OPP-00003': { lastRun: now - 3 * 3600000 },
+    'OPP-00004': { lastRun: now - 9 * 3600000 }, 'OPP-00005': { lastRun: now - 2 * 60000 }, 'OPP-00006': { lastRun: now - 5 * 3600000, lastOutcome: 'revisions_exhausted' } };
+  const short = new Set(['OPP-00003', 'OPP-00004', 'OPP-00005', 'OPP-00006']);
+  const activity = new Map([['OPP-00002', [{ operation: 'central_review' }]]]);
+  const spill = spillover({ projects, activity, state, short, now, cooldownMinutes: 10, limit: 6 });
+  assert.deepEqual(spill, ['OPP-00004'], 'one wake per blocked review: the longest-waiting short project, never one in cooldown or exhausted');
+  const woken = wakeOrder({ projects, activity, state, short, now, cooldownMinutes: 10, fallbackHours: 24, spill });
+  assert.deepEqual(woken, [{ project: 'OPP-00002', reason: 'activity' }, { project: 'OPP-00004', reason: 'spillover' }],
+    'the exhausted project still records its wake; the spillover project runs without waiting for the fallback');
+});
+
+test('no spillover while activity can refill its own project and the network is above the floor', () => {
+  const now = Date.parse('2026-11-19T12:00:00Z');
+  const projects = ['OPP-00002', 'OPP-00003'];
+  const args = { projects, activity: new Map([['OPP-00002', [{}]]]), state: { 'OPP-00002': { lastOutcome: 'written' } }, short: new Set(['OPP-00003']), now, cooldownMinutes: 10, limit: 6 };
+  assert.deepEqual(spillover(args), []);
+  assert.deepEqual(spillover({ ...args, networkOpen: 80, floor: 60 }), []);
+  assert.deepEqual(spillover({ ...args, networkOpen: null, floor: 60 }), [], 'no scan yet: no floor decision');
+});
+
+test('below the network floor, up to the per-run limit of short projects wake at once', () => {
+  const now = Date.parse('2026-11-19T12:00:00Z');
+  const projects = ['OPP-00002', 'OPP-00003', 'OPP-00004', 'OPP-00005'];
+  const state = { 'OPP-00004': { lastRun: now - 3600000 }, 'OPP-00005': { lastOutcome: 'revisions_exhausted' } };
+  const spill = spillover({ projects, activity: new Map(), state, short: new Set(projects), now, cooldownMinutes: 10, networkOpen: 12, floor: 60, limit: 2 });
+  assert.deepEqual(spill, ['OPP-00002', 'OPP-00003'], 'never-run projects first, capped at the limit, exhausted ones skipped');
+  assert.deepEqual(spillover({ projects, activity: new Map(), state, short: new Set(projects), now, cooldownMinutes: 10, networkOpen: 12, floor: 60, limit: 0 }), []);
+});
+
+test('a revision can carry up to the starter\'s 12 parts when units_per_run asks for it; the default stays 3', () => {
+  assert.equal(UNITS_PER_RUN_LIMIT, 12);
+  assert.equal(MAX_UNITS_PER_RUN, 3);
+  const stock = { open: 0, unopened: 0 };
+  assert.equal(unitsNeeded(stock, 6), 3, 'default per-run cap unchanged');
+  assert.equal(unitsNeeded(stock, 6, 6), 6);
+  assert.equal(PROJECT_AGENT_SCHEMAS.writer.properties.units.maxItems, 12);
+  assert.equal(PROJECT_AGENT_SCHEMAS.assessor.properties.verdicts.items.properties.unit.maximum, 12);
+  const many = parseWriter({ note: '', units: Array.from({ length: 14 }, (_, i) => ({ records: [{ kind: 'doi', id: `10.3000/u${i}` }], reason: 'r' })) }, { needed: 6 });
+  assert.equal(many.units.length, 6, 'the writer is held to what was asked');
+  assert.equal(parseWriter({ note: '', units: Array.from({ length: 14 }, (_, i) => ({ records: [{ kind: 'doi', id: `10.3000/v${i}` }], reason: 'r' })) }, { needed: 99 }).units.length, 12);
+});
+
+test('units_per_run and network_floor are optional and bounded', () => {
+  assert.doesNotThrow(() => validateConfig({ ...config, units_per_run: 6, network_floor: 60 }));
+  assert.doesNotThrow(() => validateConfig(config), 'an existing config without them stays valid');
+  for (const change of [{ units_per_run: 0 }, { units_per_run: 13 }, { network_floor: -1 }, { network_floor: 5000 }, { units_per_run: 2.5 }]) {
+    assert.throws(() => validateConfig({ ...config, ...change }), refuses('invalid_agent_config'));
+  }
+  const { target_open: _t, ...missing } = config;
+  assert.throws(() => validateConfig(missing), refuses('invalid_agent_config'), 'required keys stay required');
 });
