@@ -1,7 +1,8 @@
+import { catalogueTest, catalogueSkip } from './private-catalogue.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {loadCatalogue}from'../server/catalogue.mjs';
 import * as tasks from '../server/initial-project-tasks.mjs';
-test('every source project receives stable evidence-bound draft tasks without invented bounty or funds',async()=>{
+catalogueTest('every source project receives stable evidence-bound draft tasks without invented bounty or funds',async()=>{
  assert.equal(typeof tasks.createInitialProjectTasks,'function');
  const catalogue=await loadCatalogue(new URL('../catalogue/',import.meta.url).pathname),service=tasks.createInitialProjectTasks(catalogue),summary=service.summary();
  assert.equal(summary.projects,21600);assert.equal(summary.drafts,43200);assert.equal(summary.payable,0);assert.equal(summary.held,43200);
