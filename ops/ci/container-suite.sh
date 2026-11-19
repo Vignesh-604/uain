@@ -84,7 +84,8 @@ case "$suite" in
   # (chain/federation) runs in native-chain, nightly in e2e.yml.
   node --test chain/client/contract-fixtures.test.mjs
   node --test scripts/prepare-proposed-project-sites.test.mjs
-  node --test press/press.test.mjs
+  # press/ stays in the private operations repository; where it is absent the step says so.
+  if [ -f press/press.test.mjs ]; then node --test press/press.test.mjs; else echo "press: private, not in this repository; skipped"; fi
   (cd contracts && npm_ci_rebuild && npm test)
   python3 -m unittest discover -s ops/node-backup -p 'test_*.py' -v
   python3 ops/chain/failover-test.py
