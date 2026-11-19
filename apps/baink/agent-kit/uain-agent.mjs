@@ -8,7 +8,7 @@
  *   node uain-agent.mjs backup [--out FILE] [--passphrase-file FILE]   encrypted identity backup; with no passphrase given, a strong one is made and saved to its own file
  *   node uain-agent.mjs restore FILE [--passphrase-file FILE]   restore an encrypted (or BAINK web) identity backup
  *   node uain-agent.mjs account --name "My agent"  create or read the BAINK profile (sends a saved --via code once)
- *   node uain-agent.mjs enrol --name "My agent" --operator "Me"   UAIN licence, waits until active
+ *   node uain-agent.mjs enrol --name "My agent" --operator "Me"   UAIN licence, waits until active; resumes an enrolment an earlier run prepared and never sent (0.2.25)
  *   node uain-agent.mjs tasks [--q "longevity"] [--project ID] [--cursor N] [--limit 12] [--level starter]    paid tasks you can take now (claimable), with difficulty; --all adds the rest with why_not
  *   node uain-agent.mjs template <task>            survey template text, or the task's criteria
  *   node uain-agent.mjs join <project>             join the task's project (once)
@@ -65,7 +65,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const VERSION = '0.2.24';
+const VERSION = '0.2.25';
 const subtle = webcrypto.subtle;
 const enc = new TextEncoder();
 const HASH = /^[a-f0-9]{64}$/, ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/, UINT = /^(0|[1-9][0-9]{0,19})$/;
@@ -885,8 +885,30 @@ export const ops = {
     // never landed (not_received, expired_unincluded): BAINK would otherwise answer with that old step.
     const released = Object.values(journal.steps).some((x) => x.kind === 'enrol' && x.retry === true && ['not_received', 'expired-unused', 'expired_unincluded'].includes(x.status));
     if (journal.ids.enrol?.payload !== key || released) { journal.ids.enrol = { payload: key, id: randomUUID() }; writeJournal(o, journal); }
-    const result = await write(o, identity, { kind: 'enrol', operation: 'enrol', target: identity.address, payload,
-      prepare: { path: '/api/native/enrol/prepare', body: { clientRequestId: journal.ids.enrol.id, ...payload } } });
+    const send = () => write(o, identity, { kind: 'enrol', operation: 'enrol', target: identity.address, payload,
+      prepare: { path: '/api/native/enrol/prepare', body: { clientRequestId: readJournal(o).ids.enrol.id, ...payload } } });
+    let result;
+    try { result = await send(); } catch (error) {
+      if (error.code !== 'enrol_intent_pending') throw error;
+      // BAINK already holds an enrolment for this key that this folder does not know about: an earlier run was
+      // stopped between prepare and send, or retried with other details (which replaced the saved request id).
+      // Resume that one when the details match; otherwise say exactly what is waiting and how long it lasts.
+      const waiting = await pendingEnrol(o, identity);
+      if (!waiting) throw error;
+      const same = plainJSON(waiting.command.payload) === key;
+      if (waiting.sendAttemptedAt) {
+        const j = readJournal(o);
+        j.address ??= identity.address;
+        j.steps[waiting.id] = { intent: waiting.id, kind: 'enrol', operation: 'enrol', target: identity.address, payload: waiting.command.payload, status: waiting.status, relayed: true, sentAt: waiting.sendAttemptedAt };
+        writeJournal(o, j);
+        fail('step_outstanding', `An enrolment for this key was already sent (step ${waiting.id}, ${waiting.status}). Run: uain-agent reconcile ${waiting.id}. Nothing new was sent; do not enrol again.`);
+      }
+      if (!same) throw Object.assign(new Error(`An earlier enrolment for this key is prepared but was never signed, with name "${waiting.command.payload.name}" and operator "${waiting.command.payload.operator}". Nothing was sent. Either enrol again with exactly that name and operator (it finishes that enrolment now), or wait ${waiting.minutesLeft} and enrol with the new details. Do not run init again: that makes another key.`), { code: 'enrol_intent_pending', next: `uain-agent enrol --name ${JSON.stringify(waiting.command.payload.name)} --operator ${JSON.stringify(waiting.command.payload.operator)}` });
+      const j = readJournal(o);
+      j.ids.enrol = { payload: key, id: waiting.clientRequestId };
+      writeJournal(o, j);
+      result = await send();
+    }
     const waited = wait > 0 ? await waitForLicence(o, identity, result.intent.id, wait) : null;
     // One plain line, whatever the step record says: is the membership active, and how to check.
     const step = readJournal(o).steps[result.intent.id], active = waited?.licence === 'active';
@@ -1420,6 +1442,7 @@ export const HINTS = {
   identity_mismatch: 'This folder holds another identity\'s steps. Restore the backup under another name (CLI: --as <name>).',
   identity_permissions: 'The key file is readable by other users. Fix its permissions as the message says, then try again.',
   account_missing: 'Call uain_agent_account (confirm: true) with a display name.',
+  enrol_intent_pending: 'An earlier enrolment of this key is still open. Enrol again with exactly the name and operator the message names, or wait the time it names; never run init again (that makes a new key).',
   step_outstanding: 'Call uain_agent_reconcile with the step id in the message. Do not send the step again.',
   step_unsettled: 'Call uain_agent_reconcile with the step id in the message; if it is still open, wait two minutes and call it again. Do not send the step again.',
   native_sequence_pending: 'An earlier step of yours is still being settled. Call uain_agent_next: it reads that step\'s record. Nothing was sent.',
@@ -1485,6 +1508,17 @@ const units = (v) => { const s = String(v).padStart(7, '0'); return `${s.slice(0
 // means BAINK could not prove the network's state, which no amount of waiting here fixes; after
 // UNREADABLE_LIMIT readings in a row the wait stops and says so, instead of promising admission for ever.
 const UNREADABLE_LIMIT = 4;
+/** The enrolment BAINK holds open for this key (prepared or sent, not settled), with a plain wait estimate. */
+async function pendingEnrol(o, identity) {
+  const listed = await api(o, 'GET', '/api/native/enrol', undefined, identity).catch(() => null);
+  const open = (listed?.intents ?? []).find((i) => i?.command?.operation === 'enrol' && ['prepared', 'accepted', 'unknown', 'refused'].includes(i.status) && typeof i.clientRequestId === 'string');
+  if (!open) return null;
+  const config = await api(o, 'GET', '/api/config').catch(() => null);
+  const height = config?.native?.proof?.height, blocks = UINT.test(height ?? '') && UINT.test(open.command.expires_height ?? '') ? Number(BigInt(open.command.expires_height) - BigInt(height)) : null;
+  // About 2.2 seconds a block (100 blocks expire in roughly four minutes); rounded up, plus a minute of margin.
+  const minutesLeft = blocks === null ? 'about five minutes' : blocks <= 0 ? 'a minute' : `about ${Math.ceil((blocks * 2.5) / 60) + 1} minutes`;
+  return { ...open, minutesLeft };
+}
 async function waitForLicence(o, identity, intentId, seconds) {
   const end = Date.now() + seconds * 1000;
   let unreadable = 0;

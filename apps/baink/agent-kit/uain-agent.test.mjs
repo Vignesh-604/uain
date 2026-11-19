@@ -106,7 +106,7 @@ test('local signatures equal the BAINK web signer (central_submit, project_join,
 });
 
 /** Real createBainkServer; the native chain is a fictional in-memory state behind the pinned transport seam. */
-async function bainkFixture(t, address, publicKey) {
+async function bainkFixture(t, address, publicKey, extra = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'uain-agent-baink-'));
   const genesis = JSON.stringify({ chain_id: 'fictional-agent-kit' }), genesisFile = join(dir, 'genesis.json'), binary = join(dir, 'reader');
   await writeFile(binary, 'synthetic pinned transport fixture', { mode: 0o700 });
@@ -131,7 +131,7 @@ async function bainkFixture(t, address, publicKey) {
       const out = { chain_id: 'fictional-agent-kit', height: chain.height, header_time: new Date().toISOString(), app_hash: 'c'.repeat(64), event_count: chain.eventCount, records: {} };
       // Like the pinned reader, every snapshot also carries its anchor records.
       for (const k of [...(selection.keys ?? []), 'guardians', 'legacy_import', 'event_count']) out.records[k] = structuredClone(records[k] ?? null);
-      if (selection.member) out.member = selection.member === address ? structuredClone(member) : null;
+      if (selection.member) out.member = selection.member === address && records['member/' + address] ? structuredClone(member) : null;
       if (selection.receipt) out.receipt = chain.receipt;
       // The batched central reader selects proven keys by their query entries.
       out.queries = Object.keys(out.records).map((k) => ({ key: Buffer.from(k).toString('base64') }));
@@ -155,7 +155,7 @@ async function bainkFixture(t, address, publicKey) {
   const nativeConfig = { binary, binaryHash: sha('synthetic pinned transport fixture'), genesis: genesisFile, genesisHash: sha(genesis), chainId: 'fictional-agent-kit', rpc: `http://127.0.0.1:${rpc.address().port}`, timeoutMs: 3000, maxAgeSeconds: 120 };
   transport.profile = { chainId: nativeConfig.chainId, genesisSha256: nativeConfig.genesisHash, verifierSha256: nativeConfig.binaryHash, maxAgeSeconds: 120 };
   const url = `http://127.0.0.1:${port}`;
-  const app = await createBainkServer({ dataDir: join(dir, 'data'), publicOrigin: url, projectsSource: null, catalogueDir: null, nativeConfig, nativeStateTransport: transport, centralEarningEnabled: true });
+  const app = await createBainkServer({ dataDir: join(dir, 'data'), publicOrigin: url, projectsSource: null, catalogueDir: null, nativeConfig, nativeStateTransport: transport, centralEarningEnabled: true, ...extra });
   await new Promise((r) => app.server.listen(port, '127.0.0.1', r));
   t.after(async () => { app.server.closeAllConnections?.(); await app.close(); await new Promise((r) => rpc.close(r)); await rm(dir, { recursive: true, force: true }); });
   /** The network records a sent step: the next reconcile finds its exact event. */
@@ -172,7 +172,7 @@ async function bainkFixture(t, address, publicKey) {
     if (operation === 'project_join') records[`participation/${PROJECT}/${address}/`] = { project: PROJECT, member: address };
     else {records['central_submission/' + subject] = { ...envelope.command.payload, author: address, state: 'under_review', height: event.height };Object.assign(records['central_task/'+TASK],{state:'under_review',pending:subject});}
   }
-  return { url, sent, finalize, chain, member };
+  return { url, sent, finalize, chain, member, records };
 }
 
 test('end to end on the real server: signed account, tasks, template, join, survey submit, lost answer never re-sent', async (t) => {
@@ -689,4 +689,24 @@ test('the kit is fetched from uain.global but still signs for and talks to the p
   assert.match(src, /process\.env\.UAIN_AGENT_URL \?\? 'https:\/\/baink\.money'/, 'backend origin, and so the signature audience, unchanged');
   assert.doesNotMatch(src, /curl -fsSLO? https:\/\/baink\.money/, 'every download line names uain.global');
   assert.doesNotMatch(src, /'baink_agent_[a-z_]+'/, 'no tool or step names an earlier tool name');
+});
+
+test('an enrolment prepared but never sent (a stopped run, a renamed retry) is named and finished, not a dead end', async (t) => {
+  const o = { home: await home(t) };
+  const me = await kit.initIdentity(o);
+  const f = await bainkFixture(t, me.address, me.publicKey, { nativeEnrolEnabled: true });
+  o.url = f.url;
+  delete f.records['member/' + me.address]; // not a member yet
+  await kit.ops.account(o, { name: 'Orphan agent' });
+  const identity = await kit.loadIdentity(o);
+  // A run stopped between prepare and send leaves this on BAINK and only the request id in the journal.
+  await writeFile(join(o.home, 'default', 'journal.json'), JSON.stringify({ version: 1, steps: {}, ids: {} }), { mode: 0o600 });
+  const orphan = (await kit.api(o, 'POST', '/api/native/enrol/prepare', { clientRequestId: 'stopped-run-0001', name: 'First name', operator: 'Ana', family: '' }, identity)).intent;
+  // Other details: the error names the waiting ones instead of the bare "an enrolment intent already exists".
+  await assert.rejects(kit.ops.enrol(o, { name: 'Second name', operator: 'Ana', wait: 0 }), (e) => e.code === 'enrol_intent_pending' && /"First name"/.test(e.message) && /Nothing was sent/.test(e.message) && /--name "First name"/.test(e.next));
+  // The same details (with a request id this folder never saw) resume that enrolment instead of being refused.
+  const r = await kit.ops.enrol(o, { name: 'First name', operator: 'Ana', wait: 0 });
+  assert.equal(r.intent.id, orphan.id);
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.sent[0].command.payload.name, 'First name');
 });
