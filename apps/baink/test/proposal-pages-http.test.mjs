@@ -1,3 +1,4 @@
+import { catalogueTest, catalogueSkip } from './private-catalogue.mjs';
 import test from 'node:test';
 import { readPersistedState } from '../server/store-sqlite.mjs';
 import assert from 'node:assert/strict';
@@ -35,7 +36,7 @@ async function setup(
   };
 }
 
-test('canonical inactive proposal HTML and JSON are initial, source-bound and read-only', async (t) => {
+catalogueTest('canonical inactive proposal HTML and JSON are initial, source-bound and read-only', async (t) => {
   const f = await setup(t);
   const before = await Promise.resolve(JSON.stringify(readPersistedState(f.dataDir))).catch(
     (error) => {
@@ -96,7 +97,7 @@ test('canonical inactive proposal HTML and JSON are initial, source-bound and re
   );
 });
 
-test('proposal namespace redirects by stable ID, fails closed and retains privacy/navigation rules', async (t) => {
+catalogueTest('proposal namespace redirects by stable ID, fails closed and retains privacy/navigation rules', async (t) => {
   const f = await setup(t);
   let response = await f.get('/proposals/OPP-00001');
   assert.equal(response.status, 308);
@@ -194,7 +195,7 @@ test('raw proposal traversal cannot normalize into the generic application', asy
   }
 });
 
-test('public JSON documents support ordinary cross-site navigation while rejecting cross-site fetches', async (t) => {
+catalogueTest('public JSON documents support ordinary cross-site navigation while rejecting cross-site fetches', async (t) => {
   const f = await setup(t);
   const getRaw = (path, options) =>
     new Promise((resolve, reject) => {

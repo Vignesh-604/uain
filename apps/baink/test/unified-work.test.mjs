@@ -1,3 +1,4 @@
+import { catalogueTest, catalogueSkip } from './private-catalogue.mjs';
 import test from'node:test';import assert from'node:assert/strict';
 import{createServer}from'node:http';
 import{createUnifiedWork,UnifiedWorkError}from'../server/unified-work.mjs';
@@ -29,7 +30,7 @@ test('unified query rejects unsupported, repeated, oversized and ambiguous filte
  const f=setup();for(const input of[{source:'funded'},{page:0},{pageSize:101},{page:'1.5'},{q:'x'.repeat(201)},{managementStatus:'paid'},{privateKey:'never'}])await assert.rejects(f.service.list(input),UnifiedWorkError);
  await assert.rejects(f.service.list(new URLSearchParams('q=a&q=b')),UnifiedWorkError);
 });
-test('real cached proposal index contains summaries only and preserves full validated export coverage',async()=>{
+catalogueTest('real cached proposal index contains summaries only and preserves full validated export coverage',async()=>{
  const catalogue=await loadCatalogue(new URL('../catalogue/',import.meta.url).pathname),index=catalogue.publicSummaryIndex();assert.equal(index.records.length,21600);assert.equal(index,catalogue.publicSummaryIndex());assert.equal(index.domains.length,45);assert.ok(!Object.hasOwn(index.records[0].summary,'source_fields'));assert.ok(!Object.hasOwn(index.records[0],'detail'));
  const service=createUnifiedWork({proposals:catalogue,readNative:async()=>{throw Error('Unused native read');},getManagement:()=>({enabled:false,states:new Map()})});const result=await service.list({source:'proposal',q:'',page:216,pageSize:100});assert.equal(result.total,21600);assert.equal(result.items.length,100);assert.equal(result.coverage.complete,true);
 });
