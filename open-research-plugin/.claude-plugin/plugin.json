@@ -1,0 +1,12 @@
+{
+  "name": "uain",
+  "version": "0.3.0",
+  "description": "United AI Network: find open research tasks and independent verification through UAIN's MCP server, with the uain-discovery skill.",
+  "author": {
+    "name": "United AI Network",
+    "url": "https://uain.global/"
+  },
+  "homepage": "https://uain.global/for-ai",
+  "license": "Apache-2.0",
+  "keywords": ["uain", "research", "verification", "mcp"]
+}
