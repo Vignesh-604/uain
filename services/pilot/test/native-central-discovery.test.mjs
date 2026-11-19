@@ -72,15 +72,50 @@ test('BAINK operator holds hide exact matching tasks only on the pinned chain',a
  assert.equal(central.centralTaskHeld(task('T-OPP-00005-1-prior-art-survey-r2-p1','P-OPP-00005'),live),false);
 });
 
-test('central reads are bounded to the newest 512 and fail soft on a malformed proof',async()=>{
+test('central reads cover every task up to 4096 and fail soft on a malformed proof',async()=>{
+ assert.equal(central.CENTRAL_DISCOVERY_LIMIT,4096);
  const many=Array.from({length:520},(_,i)=>task('T-'+i,'P-1')),calls=[];
  const result=await central.centralDiscovery(reader(store(many),calls),{pins});
- assert.equal(result.status,'available');assert.equal(result.read,512);assert.equal(result.truncated,true);assert.equal(result.rows[0].id,'T-519');assert.equal(result.rows.at(-1).id,'T-8');
- assert.equal(calls.length,33,'count, then 512 index keys and 512 records in reads of at most 32 keys');assert.ok(calls.every(k=>k.length<=32));
+ assert.equal(result.status,'available');assert.equal(result.read,520);assert.equal(result.truncated,false);assert.equal(result.rows.length,520);assert.equal(result.rows[0].id,'T-519');assert.equal(result.rows.at(-1).id,'T-0');
+ assert.equal(calls.length,1+17+17,'count, then 520 index keys and 520 records in reads of at most 32 keys');assert.ok(calls.every(k=>k.length<=32));
  const empty=await central.centralDiscovery(reader({}),{pins});assert.deepEqual([empty.status,empty.rows.length,empty.total],['available',0,'0']);
  const records=store([task('T-1','P-1')]);records['central_task/T-1']={...records['central_task/T-1'],criteria:'changed'};
  assert.deepEqual(await central.centralDiscovery(reader(records),{pins}),{status:'unavailable',rows:[]});
  assert.deepEqual(await central.centralDiscovery(async()=>{throw Error('verifier down')},{pins}),{status:'unavailable',rows:[]});
+});
+
+test('central reads above 4096 tasks read only the newest 4096 and say truncated',async()=>{
+ const over=store(Array.from({length:4097},(_,i)=>task('T-'+i,'P-1'))),calls=[];
+ const result=await central.centralDiscovery(reader(over,calls),{pins});
+ assert.equal(result.status,'available');assert.equal(result.total,'4097');assert.equal(result.read,4096);assert.equal(result.truncated,true);
+ assert.equal(result.rows[0].id,'T-4096');assert.equal(result.rows.at(-1).id,'T-1');
+ assert.ok(calls.every(k=>k.length<=32));assert.ok(!calls.flat().includes('central_task_index/'+'1'.padStart(20,'0')),'the oldest task is outside the bound');
+});
+
+test('a central memo re-proves only tasks that can still change',async()=>{
+ const won=(id)=>task(id,'P-1',{state:'accepted',winner:'S-'+id,reserved:'0',paid:'55000000'});
+ const tasks=[task('T-a','P-1'),won('T-b'),task('T-c','P-1',{state:'conditional_expired',reserved:'0'}),task('T-d','P-1',{state:'under_review',pending:'S-1'}),task('T-e','P-1',{state:'no_winner',mode:'contest',reserved:'0'})];
+ const records=store(tasks),memo=central.centralMemo('memo-test'),calls=[];
+ assert.equal(central.centralMemo('memo-test'),memo,'one memo per key');
+ assert.deepEqual(central.CENTRAL_FINAL_STATES,['accepted','conditional_expired','no_winner']);
+ const first=await central.centralDiscovery(reader(records,calls),{pins,memo});
+ assert.equal(first.status,'available');assert.equal(calls.flat().length,1+5+5);
+ calls.length=0;const second=await central.centralDiscovery(reader(records,calls),{pins,memo});
+ assert.deepEqual(second,first,'the same result');
+ assert.deepEqual(calls.flat(),['central_task_count','central_task/T-d','central_task/T-a'],'the count and the records that can change, no index keys');
+ const added=task('T-f','P-1');const more=store([...tasks,added]);
+ calls.length=0;const third=await central.centralDiscovery(reader(more,calls),{pins,memo});
+ assert.deepEqual(calls.flat(),['central_task_count','central_task_index/'+'6'.padStart(20,'0'),'central_task/T-f','central_task/T-d','central_task/T-a']);
+ assert.deepEqual(third.rows.map(r=>r.id),['T-f','T-a']);
+ calls.length=0;const now=Date.now(),later=await central.readCentralTasks(reader(more,calls),central.CENTRAL_DISCOVERY_LIMIT,memo,now+central.CENTRAL_FINAL_MS+1000);
+ assert.deepEqual(calls.flat().sort(),['central_task_count',...['a','b','c','d','e','f'].map(x=>'central_task/T-'+x)].sort(),'final records are proved again after CENTRAL_FINAL_MS');
+ assert.equal(later.proved,7);assert.deepEqual(later.tasks.map(t=>t.id),['T-f','T-e','T-d','T-c','T-b','T-a']);
+ calls.length=0;const plain=await central.centralDiscovery(reader(more,calls),{pins});
+ assert.equal(calls.flat().length,1+6+6,'without a memo everything is read');assert.deepEqual(plain.rows,third.rows);
+ calls.length=0;const shrunk=await central.readCentralTasks(reader(store(tasks.slice(0,2)),calls),central.CENTRAL_DISCOVERY_LIMIT,memo);
+ assert.deepEqual(shrunk.tasks.map(t=>t.id),['T-b','T-a']);assert.equal(calls.flat().length,1+2+2,'a lower count drops the memo instead of trusting it');
+ const bad=store(tasks);bad['central_task/T-a']={...bad['central_task/T-a'],criteria:'changed'};
+ assert.deepEqual(await central.centralDiscovery(reader(bad),{pins,memo}),{status:'unavailable',rows:[]},'a fresh record still passes the shape check');
 });
 
 test('the proved public reader serves central keys in batches of at most 32',async()=>{
