@@ -474,6 +474,22 @@ test('a transient central_proof_unavailable on a read is retried; a write is nev
   assert.equal(writes, 1, 'a write is sent once and never retried here');
 });
 
+test('a proof refusal on prepare (nothing signed yet) is waited out once by the kit, not handed back to the agent', async (t) => {
+  const o = { home: await home(t), url: 'http://127.0.0.1:9', sleep: async () => {}, notice: () => {} };
+  await kit.ops.init(o);
+  const refusal = () => new Response(JSON.stringify({ error: { code: 'central_proof_unavailable', message: 'proof unavailable' } }), { status: 503, headers: { 'content-type': 'application/json' } });
+  let prepares = 0;
+  // The second prepare answers with a step already sent, so the kit stops before signing (no network pins needed).
+  const sentEarlier = Response.json({ intent: { id: 'p-1', status: 'broadcasting', command: { operation: 'project_join' } } });
+  o.fetch = async (url) => new URL(url).pathname === '/api/config' ? Response.json({}) : (++prepares < 2 ? refusal() : sentEarlier);
+  const r = await kit.ops.join(o, { project: 'P-OPP-00001' });
+  assert.equal(prepares, 2, 'one refusal, one wait, one more prepare');
+  assert.match(JSON.stringify(r), /p-1/);
+  prepares = 0; o.fetch = async (url) => new URL(url).pathname === '/api/config' ? Response.json({}) : (prepares++, refusal());
+  await assert.rejects(kit.ops.join(o, { project: 'P-OPP-00002' }), (e) => e.code === 'central_proof_unavailable' && /Nothing was signed/.test(e.message));
+  assert.equal(prepares, 2, 'asked twice at most');
+});
+
 test('a seller with an agreed deal and no receiving key is told to set up receiving first', async (t) => {
   const o = { home: await home(t), url: 'http://127.0.0.1:9' };
   await kit.ops.init(o);
