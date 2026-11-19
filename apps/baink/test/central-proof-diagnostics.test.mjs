@@ -28,7 +28,7 @@ test('proof categories preserve stale and wrong-pin refusal rather than relaxing
 });
 test('cross-batch state coherence reports only bounded height/event/sequence projection',async()=>{
  const f=fixture(),events=[];f.records.central_earning_activation={policy:'central-earning-five-kpi-fund-v2',reviewer:f.reviewer,height:'5',evidence_digest:'e'.repeat(64)};
- f.patch((c,n)=>{if(n===2){c.proof.height=c.state.height='21';c.proof.appHash=c.state.app_hash='d'.repeat(64);c.state.event_count='2';}});
+ f.patch((c,n)=>{if(n%2===0){c.proof.height=c.state.height='21';c.proof.appHash=c.state.app_hash='d'.repeat(64);c.state.event_count='2';}});
  await refused(service(f,e=>events.push(e)).status(f.user));assert.equal(events.length,1);assert.equal(events[0].category,'state_coherence');assert.deepEqual(events[0].coherence,{headHeight:'20',currentHeight:'21',headEventCount:'1',currentEventCount:'2',headSequence:'2',currentSequence:'2',sameAppHash:false,sameEventCount:false,sameSequence:true});assert.ok(!JSON.stringify(events).includes('d'.repeat(64)));
 });
 test('asset and earnings refusal categories do not publish their malformed values',async()=>{
