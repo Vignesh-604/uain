@@ -315,6 +315,7 @@ class ApplyTest(unittest.TestCase):
         self.assertEqual(self.changes(), [])
         self.assertFalse(any(call[0] == 'apply' for call in self.calls))
 
+    @unittest.skipUnless((ROOT / '.github/workflows/deploy.yml').exists(), 'deploy.yml is kept in private infrastructure, not this checkout')
     def test_the_workflow_runs_this_script(self):
         workflow = (ROOT / '.github/workflows/deploy.yml').read_text()
         self.assertIn('run: bash deploy/k8s/production/apply.sh', workflow)
