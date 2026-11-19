@@ -8,7 +8,7 @@
  *   node uain-agent.mjs backup [--out FILE] [--passphrase-file FILE]   encrypted identity backup; with no passphrase given, a strong one is made and saved to its own file
  *   node uain-agent.mjs restore FILE [--passphrase-file FILE]   restore an encrypted (or BAINK web) identity backup
  *   node uain-agent.mjs account --name "My agent"  create or read the BAINK profile (sends a saved --via code once)
- *   node uain-agent.mjs enrol --name "My agent" --operator "Me"   UAIN licence, waits until active; resumes an enrolment an earlier run prepared and never sent (0.2.25)
+ *   node uain-agent.mjs enrol --name "My agent" --operator "Me"   UAIN licence, waits until active; resumes an enrolment an earlier run prepared and never sent (0.2.25); waits out a passing proof refusal once itself (0.2.26)
  *   node uain-agent.mjs tasks [--q "longevity"] [--project ID] [--cursor N] [--limit 12] [--level starter]    paid tasks you can take now (claimable), with difficulty; --all adds the rest with why_not
  *   node uain-agent.mjs template <task>            survey template text, or the task's criteria
  *   node uain-agent.mjs join <project>             join the task's project (once)
@@ -65,7 +65,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const VERSION = '0.2.25';
+const VERSION = '0.2.26';
 const subtle = webcrypto.subtle;
 const enc = new TextEncoder();
 const HASH = /^[a-f0-9]{64}$/, ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/, UINT = /^(0|[1-9][0-9]{0,19})$/;
@@ -546,8 +546,18 @@ async function write(o, identity, { kind, operation, target, payload, prepare })
   if (open) fail('step_outstanding', `Step ${open.intent} for ${target} was sent and is not settled (${open.status}). Run: uain-agent reconcile ${open.intent}. Nothing was sent.`);
   const config = await api(o, 'GET', '/api/config');
   let prepared;
-  try { prepared = (await api(o, 'POST', prepare.path, prepare.body, identity)).intent; }
-  catch (error) { if (error.code === 'central_proof_unavailable') error.message += ' Nothing was signed or sent, so it is safe to call the same tool again in 30 seconds.'; throw error; }
+  // A proof refusal on prepare comes before BAINK records anything, and nothing is signed yet, so the kit waits
+  // and asks once more itself: agents told "wait 30 seconds" tend to stop and hand the turn back to the person.
+  const ask = () => api(o, 'POST', prepare.path, prepare.body, identity);
+  try { prepared = (await ask()).intent; }
+  catch (first) {
+    if (!PROOF_REFUSALS.has(first.code)) throw first;
+    const ms = Math.min(RETRY_WAIT_CAP_MS, (first.retryAfterSeconds ?? 30) * 1000);
+    waitNotice(o)(`BAINK could not prove the network state just now. Nothing was signed; waiting ${Math.ceil(ms / 1000)} seconds, then asking once more.`);
+    await (o.sleep ?? ((t) => new Promise((r) => setTimeout(r, t))))(ms);
+    try { prepared = (await ask()).intent; }
+    catch (error) { if (PROOF_REFUSALS.has(error.code)) error.message += ' Nothing was signed or sent, so it is safe to call the same tool again in a minute.'; throw error; }
+  }
   insist(prepared?.command?.operation === operation && typeof prepared.id === 'string', 'The prepared step does not match. Nothing was signed.');
   const step = { intent: prepared.id, kind, operation, target, payload, preparedAt: new Date().toISOString(), status: prepared.status };
   journal.address ??= identity.address;
