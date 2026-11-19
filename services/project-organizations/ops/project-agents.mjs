@@ -33,8 +33,8 @@ import { createRetriever, driverDigest, surveyRecords } from '../src/verificatio
 import { FUND_MANAGER } from './starter-authority.mjs';
 import { preflightRow } from './survey-parts.mjs';
 import {
-  MAX_UNITS_PER_RUN, PROJECT_AGENT_MODEL, activityFromEvents, assessorPrompt, executionsAdmitted, nextRevision, parseAssessor, parseWriter,
-  projectStock, receiptDigest, resolvedUnits, unitsNeeded, wakeOrder, writerPrompt,
+  MAX_UNITS_PER_RUN, PROJECT_AGENT_MODEL, UNITS_PER_RUN_LIMIT, activityFromEvents, assessorPrompt, executionsAdmitted, nextRevision, parseAssessor, parseWriter,
+  projectStock, receiptDigest, resolvedUnits, spillover, unitsNeeded, wakeOrder, writerPrompt,
 } from '../src/project-agents.mjs';
 
 export const CONFIG = '/etc/uain-custody/project-agents/config.json';
@@ -82,14 +82,20 @@ async function writePrivate(path, value, { replace = false } = {}) {
   await rename(temp, path);
 }
 
+const CONFIG_KEYS = ['cooldown_minutes', 'fallback_hours', 'max_executions_per_day', 'max_projects_per_run', 'schema', 'target_open'];
+/** Optional since 19 November 2026; left out, they keep the earlier behaviour (3 units, no floor). */
+const OPTIONAL_KEYS = ['network_floor', 'units_per_run'];
+
 export function validateConfig(c) {
-  need(c && c.schema === CONFIG_SCHEMA && Object.keys(c).sort().join(',') ===
-    'cooldown_minutes,fallback_hours,max_executions_per_day,max_projects_per_run,schema,target_open', 'invalid_agent_config');
+  need(c && c.schema === CONFIG_SCHEMA && CONFIG_KEYS.every((k) => Object.hasOwn(c, k)) &&
+    Object.keys(c).every((k) => CONFIG_KEYS.includes(k) || OPTIONAL_KEYS.includes(k)), 'invalid_agent_config');
   need(Number.isSafeInteger(c.target_open) && c.target_open >= 1 && c.target_open <= 6, 'invalid_agent_config');
   need(Number.isSafeInteger(c.max_projects_per_run) && c.max_projects_per_run >= 1 && c.max_projects_per_run <= 10, 'invalid_agent_config');
   need(Number.isSafeInteger(c.max_executions_per_day) && c.max_executions_per_day >= 2 && c.max_executions_per_day <= 1000, 'invalid_agent_config');
   need(Number.isSafeInteger(c.cooldown_minutes) && c.cooldown_minutes >= 1 && c.cooldown_minutes <= 1440, 'invalid_agent_config');
   need(Number.isSafeInteger(c.fallback_hours) && c.fallback_hours >= 1 && c.fallback_hours <= 168, 'invalid_agent_config');
+  if (c.units_per_run !== undefined) need(Number.isSafeInteger(c.units_per_run) && c.units_per_run >= 1 && c.units_per_run <= UNITS_PER_RUN_LIMIT, 'invalid_agent_config');
+  if (c.network_floor !== undefined) need(Number.isSafeInteger(c.network_floor) && c.network_floor >= 0 && c.network_floor <= 2000, 'invalid_agent_config');
   return c;
 }
 
@@ -195,8 +201,9 @@ export async function runProject(project, { ctx, config, stock, activity, deps }
   // A short project gets a full revision of MAX_UNITS_PER_RUN units, not just the shortfall: part ids
   // allow only revisions r3..r9, so one-unit revisions ran out within hours on the most used projects
   // (OPP-00004 reached r7 on 9 November 2026). Extra units are simply more open work.
-  const short = unitsNeeded(stock, config.target_open);
-  const needed = short > 0 ? MAX_UNITS_PER_RUN : 0;
+  const perRun = config.units_per_run ?? MAX_UNITS_PER_RUN;
+  const short = unitsNeeded(stock, config.target_open, perRun);
+  const needed = short > 0 ? perRun : 0;
   const base = { schema: 'uain-project-agents-run-v1', project, at: new Date(deps.now()).toISOString(), activity, stock: { ...stock, covered: stock.covered.length }, short, needed };
   if (needed === 0) return { ...base, outcome: 'stock_full', executions: [] };
   const revision = nextRevision(stock);
@@ -268,7 +275,11 @@ export async function tick({ exec = run, now = () => Date.now(), check = false }
   // reading every part each minute starved public reads (9 November 2026).
   const scanDue = !(now() - (state.lastScan ?? 0) < SCAN_MINUTES * 60000);
   const withActivity = projects.filter((p) => activity.has(p) || (state.projects[p]?.pendingActivity ?? []).length);
-  const reading = scanDue ? projects : withActivity;
+  // Network-wide refill: other projects woken because activity landed where no revision is left, or
+  // because the network's open work fell below the floor (from the last full scan).
+  const spill = spillover({ projects, activity, state: state.projects, short: new Set(state.short ?? []), now: now(),
+    cooldownMinutes: config.cooldown_minutes, networkOpen: state.networkOpen ?? null, floor: config.network_floor ?? 0, limit: config.max_projects_per_run });
+  const reading = scanDue ? projects : [...new Set([...withActivity, ...spill])];
   const files = new Map();
   for (const p of reading) files.set(p, await partFiles(p));
   const taskIds = [...files.values()].flat().flatMap((f) => f.parts.map((x) => x.request.payload.id));
@@ -279,11 +290,15 @@ export async function tick({ exec = run, now = () => Date.now(), check = false }
     for (const f of files.get(p)) for (const x of f.parts) if (await finalizedIntent(p, x.request.id)) opened.add(x.request.id);
     stocks.set(p, projectStock(p, files.get(p), opened, records, { surveyCovered: await surveyCovered(p) }));
   }
-  if (scanDue) { state.lastScan = now(); state.short = projects.filter((p) => unitsNeeded(stocks.get(p), config.target_open) > 0); }
+  if (scanDue) {
+    state.lastScan = now();
+    state.short = projects.filter((p) => unitsNeeded(stocks.get(p), config.target_open) > 0 && nextRevision(stocks.get(p)) !== null);
+    state.networkOpen = projects.reduce((n, p) => n + stocks.get(p).open + stocks.get(p).unopened, 0);
+  }
   const short = new Set((state.short ?? []).filter((p) => !stocks.has(p) || unitsNeeded(stocks.get(p), config.target_open) > 0));
-  const woken = wakeOrder({ projects, activity, state: state.projects, short, now: now(), cooldownMinutes: config.cooldown_minutes, fallbackHours: config.fallback_hours })
+  const woken = wakeOrder({ projects, activity, state: state.projects, short, now: now(), cooldownMinutes: config.cooldown_minutes, fallbackHours: config.fallback_hours, spill })
     .filter((w) => stocks.has(w.project)).slice(0, config.max_projects_per_run);
-  const report = { schema: 'uain-project-agents-tick-v1', cursor: until, head: count, events: events.length, scanned: scanDue,
+  const report = { schema: 'uain-project-agents-tick-v1', cursor: until, head: count, events: events.length, scanned: scanDue, networkOpen: state.networkOpen ?? null, spill,
     activity: Object.fromEntries([...activity].map(([p, l]) => [p, l.length])), woken: woken.map((w) => w.project), runs: [] };
   if (check) return { ...report, check: true };
   const release = await realpath(RELEASE);
@@ -304,6 +319,8 @@ export async function tick({ exec = run, now = () => Date.now(), check = false }
       record = { schema: 'uain-project-agents-run-v1', project, at: new Date(now()).toISOString(), activity: pending, outcome: 'failed', code: error.code ?? 'error' };
     }
     record.reason = reason;
+    // Count new work at once, so a run of spillover wakes stops when the floor is met before the next scan.
+    if (Number.isSafeInteger(state.networkOpen)) state.networkOpen += (record.tasks ?? []).length;
     for (const e of record.executions ?? []) state.executions.push(Date.parse(e.startedAt));
     state.executions = state.executions.filter((t) => t > now() - 24 * 3600 * 1000);
     state.projects[project] = { lastRun: now(), lastOutcome: record.outcome, pendingActivity: [] };
