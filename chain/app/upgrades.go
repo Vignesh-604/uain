@@ -19,6 +19,7 @@ type UpgradeHandler func(ctx sdk.Context, k federation.Keeper, plan federation.U
 func RegisteredUpgrades() map[string]UpgradeHandler {
 	return map[string]UpgradeHandler{
 		CentralTaskStatesUpgrade: centralTaskStatesUpgrade,
+		MemberRenameUpgrade:      memberRenameUpgrade,
 	}
 }
 
@@ -35,6 +36,19 @@ const CentralTaskStatesUpgrade = "uaind-0-4-2-central-task-states"
 func centralTaskStatesUpgrade(ctx sdk.Context, k federation.Keeper, plan federation.UpgradePlan) error {
 	if k.CentralTaskStatesRecorded() {
 		return fmt.Errorf("central task states recorded before upgrade %q", plan.Name)
+	}
+	return nil
+}
+
+// MemberRenameUpgrade names the uaind 0.4.3 plan (member-rename-v1). Like 0.4.2 it is
+// used only once consensus v2 is active; until then the release is a stopped-node swap.
+const MemberRenameUpgrade = "uaind-0-4-3-member-rename"
+
+// memberRenameUpgrade migrates nothing: member_rename stays an unknown operation until a
+// guardian records member_rename_activate. It refuses a store where that marker exists.
+func memberRenameUpgrade(ctx sdk.Context, k federation.Keeper, plan federation.UpgradePlan) error {
+	if k.MemberRenameRecorded() {
+		return fmt.Errorf("member rename recorded before upgrade %q", plan.Name)
 	}
 	return nil
 }

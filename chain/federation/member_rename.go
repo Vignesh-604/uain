@@ -44,13 +44,30 @@ type MemberRename struct {
 	PreviousDigest string `json:"previous_digest,omitempty"`
 }
 
+const memberRenameActivationKey = "member_rename_activation"
+
+// memberRenameMarker reads the activation through the unmetered policy store, like the
+// other policy markers, so a pre-activation member_rename costs exactly the gas an
+// unknown operation did on 0.4.2.
+func (k Keeper) memberRenameMarker() []byte {
+	if reader, ok := k.Store.(interface{ MemberRenameMarker() []byte }); ok {
+		return reader.MemberRenameMarker()
+	}
+	return k.Store.Get([]byte(memberRenameActivationKey))
+}
+
+// MemberRenameRecorded reports whether a guardian has recorded the activation.
+func (k Keeper) MemberRenameRecorded() bool {
+	return k.memberRenameMarker() != nil
+}
+
 func memberRenameKey(member string, n int) string {
 	return fmt.Sprintf("member_rename/%s/%d", member, n)
 }
 
 // memberRename reports whether member_rename is allowed at height.
 func (k Keeper) memberRename(height int64) (bool, error) {
-	raw := k.Store.Get([]byte("member_rename_activation"))
+	raw := k.memberRenameMarker()
 	if raw == nil {
 		return false, nil
 	}
@@ -72,11 +89,11 @@ func (k Keeper) memberRenameActivate(c Command, height int64) (string, error) {
 	if e := Decode(c.Payload, &in); e != nil {
 		return "", e
 	}
-	if !k.guardian(c.Member) || in.Policy != MemberRenamePolicy || !digestPattern.MatchString(in.EvidenceDigest) || height < 1 || k.Store.Get([]byte("member_rename_activation")) != nil {
+	if !k.guardian(c.Member) || in.Policy != MemberRenamePolicy || !digestPattern.MatchString(in.EvidenceDigest) || height < 1 || k.Store.Get([]byte(memberRenameActivationKey)) != nil {
 		return "", errors.New("invalid member rename activation")
 	}
 	a := MemberRenameActivation{Policy: in.Policy, Height: height + 1, ApprovedBy: c.Member, EvidenceDigest: in.EvidenceDigest}
-	return in.Policy, put(k.Store, "member_rename_activation", a)
+	return in.Policy, put(k.Store, memberRenameActivationKey, a)
 }
 
 // validMemberName applies the enrolment rules plus: no control characters, valid UTF-8,
