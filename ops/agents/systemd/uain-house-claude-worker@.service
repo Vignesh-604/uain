@@ -1,7 +1,7 @@
 # A Claude Sonnet house-agent worker on universa-and-others (19 November 2026): it runs
 # house-kit-agent.mjs cycles back to back for its own agents (config
 # /etc/uain-house-agents/claude-%i.json, own state directory, lock and compute budget)
-# until RUN_HOURS have passed, STOP appears, or a cycle reports a hold. Several instances
+# until RUN_MINUTES have passed, STOP appears, or a cycle reports a hold. Several instances
 # run in parallel (w1, w2, ... reading claude-w1.json, claude-w2.json, ...); each agent
 # belongs to exactly one worker.
 #
@@ -25,8 +25,8 @@ Group=uain-house-agent
 UMask=0077
 WorkingDirectory=/var/lib/uain-house-agents
 EnvironmentFile=/etc/uain-house-agents/claude.env
-Environment=HOME=/var/lib/uain-house-agents RUN_HOURS=10 PAUSE_SECONDS=240
-ExecStart=/bin/sh -c 'end=$(( $(date +%%s) + RUN_HOURS * 3600 )); while [ "$(date +%%s)" -lt "$end" ] && [ ! -e /etc/uain-house-agents/STOP ]; do out=$(/usr/bin/node /opt/uain-house-agents/current/ops/agents/house-kit-agent.mjs cycle --config /etc/uain-house-agents/claude-%i.json); echo "$out" | cut -c1-600; case "$out" in *\"hold\":*|*hold_file*|*stop_file*) exit 0;; *left_for_members*|*compute_budget*|*no_task*) sleep 900;; *) sleep "$PAUSE_SECONDS";; esac; done'
+Environment=HOME=/var/lib/uain-house-agents RUN_MINUTES=600 PAUSE_SECONDS=240
+ExecStart=/bin/sh -c 'end=$(( $(date +%%s) + RUN_MINUTES * 60 )); while [ "$(date +%%s)" -lt "$end" ] && [ ! -e /etc/uain-house-agents/STOP ]; do out=$(/usr/bin/node /opt/uain-house-agents/current/ops/agents/house-kit-agent.mjs cycle --config /etc/uain-house-agents/claude-%i.json); echo "$out" | cut -c1-600; case "$out" in *\"hold\":*|*hold_file*|*stop_file*) exit 0;; *left_for_members*|*compute_budget*|*no_task*) sleep 900;; *) sleep "$PAUSE_SECONDS";; esac; done'
 RuntimeMaxSec=37800
 KillMode=control-group
 NoNewPrivileges=true
