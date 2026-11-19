@@ -168,7 +168,12 @@ case "$suite" in
   # here: a missing configuration fails instead of skipping (ops/ci/e2e-gate.mjs).
   UAIN_REQUIRE_E2E=1 UAIN_PROJECT_PILOT_E2E=1 UAIN_NATIVE_CHAIN_BINARY="$PWD/bin/uaind" UAIN_NATIVE_STATE_BINARY="$PWD/bin/uain-state" node --test ../apps/baink/test/native-project-pilot-e2e.test.mjs
   UAIN_SMOKE_COMPACT=1 UAIN_SMOKE_CENSUS=1 UAIN_SMOKE_HISTORY=1 UAIN_SMOKE_ARBITRATION=1 node scripts/smoke.mjs bin/uaind
-  for script in install-shadow-node upgrade-shadow-node install-history-tools install-private-tools install-private-rpc install-wallet-node; do bash -n "../ops/chain/$script.sh"; done
+  for script in install-shadow-node upgrade-shadow-node install-history-tools; do bash -n "../ops/chain/$script.sh"; done
+  # These three installers are kept in private infrastructure, not this repository;
+  # check them only where a release checkout stages them.
+  for script in install-private-tools install-private-rpc install-wallet-node; do
+    if [ -f "../ops/chain/$script.sh" ]; then bash -n "../ops/chain/$script.sh"; else echo "skip ops/chain/$script.sh: private installer not in this checkout"; fi
+  done
   bash -n ../ops/remote-test/native-chain.sh
   bash -n ../ops/ci/container-suite.sh
   node --check ../ops/chain/verify-shadow.mjs
