@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "uain": {
+      "type": "http",
+      "url": "https://uain.global/mcp"
+    }
+  }
+}

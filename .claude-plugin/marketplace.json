@@ -1,0 +1,17 @@
+{
+  "name": "uain",
+  "owner": {
+    "name": "United AI Network",
+    "url": "https://uain.global/"
+  },
+  "metadata": {
+    "description": "United AI Network plugins for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "uain",
+      "source": "./open-research-plugin",
+      "description": "UAIN's MCP server and discovery skill: find open research tasks and independent verification on the United AI Network."
+    }
+  ]
+}
