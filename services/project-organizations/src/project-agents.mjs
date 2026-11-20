@@ -23,6 +23,10 @@ export const PROJECT_AGENT_MODEL = 'claude-sonnet-5-5';
 export const PROJECT_AGENT_ROLES = Object.freeze(['writer', 'assessor']);
 export const TARGET_OPEN = 3;
 export const MAX_UNITS_PER_RUN = 3;
+/** The most units one revision may carry: the starter accepts parts p1..p12 (organization_starter.py
+ * MAX_PARTS), so a revision can be larger than the default 3 when `units_per_run` asks for it. Part ids
+ * allow revisions r3..r9 only, so units per revision is the lever on how much one project can offer. */
+export const UNITS_PER_RUN_LIMIT = SURVEY_PART_MAX_PARTS;
 /** Native operations by members that count as project activity. Openings and fundings signed by the
  * project's own guardian are the agents' own output and never wake them. */
 export const ACTIVITY_OPERATIONS = Object.freeze(['project_join', 'central_submit', 'central_review']);
@@ -32,11 +36,11 @@ const object = (properties, required = Object.keys(properties)) => ({ type: 'obj
 const record = object({ kind: { type: 'string', enum: [...KINDS] }, id: str });
 export const PROJECT_AGENT_SCHEMAS = Object.freeze({
   writer: object({
-    units: { type: 'array', maxItems: MAX_UNITS_PER_RUN, items: object({ records: { type: 'array', minItems: 1, maxItems: SURVEY_PART_MAX_REQUIRED, items: record }, reason: str }) },
+    units: { type: 'array', maxItems: UNITS_PER_RUN_LIMIT, items: object({ records: { type: 'array', minItems: 1, maxItems: SURVEY_PART_MAX_REQUIRED, items: record }, reason: str }) },
     note: str,
   }),
   assessor: object({
-    verdicts: { type: 'array', maxItems: MAX_UNITS_PER_RUN, items: object({ unit: { type: 'integer', minimum: 1, maximum: MAX_UNITS_PER_RUN }, accept: { type: 'boolean' }, reason: str }) },
+    verdicts: { type: 'array', maxItems: UNITS_PER_RUN_LIMIT, items: object({ unit: { type: 'integer', minimum: 1, maximum: UNITS_PER_RUN_LIMIT }, accept: { type: 'boolean' }, reason: str }) },
   }),
 });
 
@@ -97,7 +101,7 @@ export function projectStock(projectId, built, opened, records, { surveyCovered 
 }
 
 /** How many new units the project needs to keep `target` accepting (open now or waiting to open). */
-export const unitsNeeded = (stock, target = TARGET_OPEN) => Math.max(0, Math.min(MAX_UNITS_PER_RUN, target - stock.open - stock.unopened));
+export const unitsNeeded = (stock, target = TARGET_OPEN, perRun = MAX_UNITS_PER_RUN) => Math.max(0, Math.min(perRun, target - stock.open - stock.unopened));
 
 /** The next agent revision: 3..9, never an existing one. */
 export function nextRevision(stock) {
@@ -153,7 +157,7 @@ export function parseWriter(value, { covered = [], needed = MAX_UNITS_PER_RUN } 
   need(plain(value) && Array.isArray(value.units) && typeof value.note === 'string', 'invalid_writer_output');
   const seen = new Set(covered.map((r) => `${r.kind}:${r.id}`));
   const units = [];
-  for (const u of value.units.slice(0, Math.min(needed, MAX_UNITS_PER_RUN))) {
+  for (const u of value.units.slice(0, Math.min(needed, UNITS_PER_RUN_LIMIT))) {
     if (!plain(u) || !Array.isArray(u.records) || typeof u.reason !== 'string') continue;
     const records = [];
     for (const r of u.records.slice(0, SURVEY_PART_MAX_REQUIRED)) {
@@ -195,16 +199,46 @@ export function executionsAdmitted(timestamps, count, { maxPerDay, now }) {
 
 /** Which projects wake this tick: activity since their last run (after the cooldown), else a fallback
  * check once `fallbackHours` passed while the project is short of open units. */
-export function wakeOrder({ projects, activity, state, short, now, cooldownMinutes, fallbackHours }) {
+export function wakeOrder({ projects, activity, state, short, now, cooldownMinutes, fallbackHours, spill = [] }) {
   const out = [];
+  const spilled = new Set(spill);
   for (const p of projects) {
     const last = state[p]?.lastRun ?? 0;
     if (now - last < cooldownMinutes * 60000) continue;
     if ((activity.get(p) ?? []).length || (state[p]?.pendingActivity ?? []).length) out.push({ project: p, reason: 'activity' });
+    else if (spilled.has(p)) out.push({ project: p, reason: 'spillover' });
     else if (short.has(p) && now - last >= fallbackHours * 3600000) out.push({ project: p, reason: 'fallback' });
   }
-  // Activity first, then the longest-waiting fallback projects.
-  return out.sort((a, b) => (a.reason === b.reason ? (state[a.project]?.lastRun ?? 0) - (state[b.project]?.lastRun ?? 0) : a.reason === 'activity' ? -1 : 1));
+  // Activity first, then spillover in the order chosen, then the longest-waiting fallback projects.
+  const rank = { activity: 0, spillover: 1, fallback: 2 };
+  const at = (w) => (w.reason === 'spillover' ? spill.indexOf(w.project) : state[w.project]?.lastRun ?? 0);
+  return out.sort((a, b) => rank[a.reason] - rank[b.reason] || at(a) - at(b));
+}
+
+/**
+ * Network-wide refill (19 November 2026). A review or submission wakes only its own project, so when
+ * demand sits in projects that have used every revision (r9), work ran out on the whole network while
+ * other projects had all their revisions left. Spillover wakes other projects at once, without waiting
+ * for the hourly fallback:
+ *   - one project for each project with new activity that cannot refill (its last run was
+ *     revisions_exhausted), so every review there still leads to new work somewhere; and
+ *   - up to `limit` projects while the network's open work (`networkOpen`, accepting plus waiting to
+ *     open, from the last full scan) is below `floor`.
+ * Candidates are short projects that can still refill and are past their cooldown, longest-waiting
+ * first; projects already woken by their own activity are not counted twice.
+ */
+export function spillover({ projects, activity, state, short, now, cooldownMinutes, networkOpen = null, floor = 0, limit }) {
+  need(Number.isSafeInteger(limit) && limit >= 0, 'invalid_agent_config');
+  const active = (p) => (activity.get(p) ?? []).length > 0 || (state[p]?.pendingActivity ?? []).length > 0;
+  const exhausted = (p) => state[p]?.lastOutcome === 'revisions_exhausted';
+  const blocked = projects.filter((p) => active(p) && exhausted(p)).length;
+  const low = Number.isSafeInteger(networkOpen) && networkOpen < floor;
+  const wanted = Math.min(limit, Math.max(blocked, low ? limit : 0));
+  if (!wanted) return [];
+  return projects
+    .filter((p) => short.has(p) && !exhausted(p) && !active(p) && now - (state[p]?.lastRun ?? 0) >= cooldownMinutes * 60000)
+    .sort((a, b) => (state[a]?.lastRun ?? 0) - (state[b]?.lastRun ?? 0) || a.localeCompare(b))
+    .slice(0, wanted);
 }
 
 export const receiptDigest = (receipt) => sha256(JSON.stringify(receipt));

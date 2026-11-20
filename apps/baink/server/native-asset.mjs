@@ -217,7 +217,9 @@ function reader(config, stateTransport) {
         active++;
         acquired = true;
       } else {
-        ensure(waiting.length < 4, 'Native proof capacity unavailable');
+        // Eight may wait (19 November 2026, was four), each still within its own deadline: the
+        // remote reader has two slots, and a fifth waiter was refused at once instead of waiting.
+        ensure(waiting.length < 8, 'Native proof capacity unavailable');
         await new Promise((resolve, reject) => {
           const entry = { signal, resolve, reject };
           entry.abort = () => {

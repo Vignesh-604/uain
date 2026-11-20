@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { catalogueTest } from './private-catalogue.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,readFile,rm,realpath,stat} from 'node:fs/promises';
 import {tmpdir,userInfo} from 'node:os';
@@ -35,7 +36,7 @@ test('pinned executable drift refuses before auth and overlapping concurrent exe
  const b=await fixture(t);const outcomes=await Promise.allSettled([runPlanningSubscription(b.options),runPlanningSubscription({...b.options,prompt:"Another prepared prompt"})]);assert.equal(outcomes.filter(r=>r.status==='fulfilled').length,1);assert.equal(await readFile(b.marker,'utf8'),'auth\nmodel\n');
 });
 
-test('actual intake worker publishes a verified subscription batch locally despite full unrelated dollar journal',async t=>{
+catalogueTest('actual intake worker publishes a verified subscription batch locally despite full unrelated dollar journal',async t=>{
  const {worker}=await import('../ops/project-manager-worker.mjs');
  const plan={projectId:'OPP-00001',summary:'Check the original source evidence and establish a reproducible baseline before any research proposal is accepted.',tasks:[{title:'Identify original evidence sources',criteria:'List dated original sources, reproducibility constraints and unresolved questions with attributable evidence.',expectedEffort:'30 minutes'},{title:'Define baseline measurement criteria',criteria:'Record a falsifiable baseline and repeatable measurement method without claiming an achieved research result.',expectedEffort:'30 minutes'}],evidenceNeeded:['Dated original evidence sources'],suggestedSearches:['Original primary evidence sources','Baseline reproducibility measurement method']};
  const {root,marker,options}=await fixture(t,{structuredOutput:{plans:[plan]}});const rows='{"at":"2026-11-08T00:00:00Z","projectIds":["OPP-99999"],"model":"fixture","costUsd":25,"status":"reserved","purpose":"project_manager_plan"}\n';await writeFile(join(root,'receipts.jsonl'),rows,{mode:0o600});
@@ -43,12 +44,12 @@ test('actual intake worker publishes a verified subscription batch locally despi
  assert.equal(result.generated,1);assert.equal(result.batchWritten,true);assert.ok(progress.some(x=>x.usageSource==='subscription'&&x.costBasis==='api-equivalent-estimate'));assert.equal(await readFile(marker,'utf8'),'auth\nmodel\n');assert.equal(await readFile(join(root,'receipts.jsonl'),'utf8'),rows);await assert.rejects(stat(join(root,'compute-budget-policy.json')),{code:'ENOENT'});
  const batch=JSON.parse(await readFile(join(root,'plans.json'),'utf8'));assert.equal(batch.plans[0].projectId,'OPP-00001');assert.match(batch.plans[0].sourceDigest,/^[a-f0-9]{64}$/);
 });
-test('actual intake default API admission still pauses at existing full dollar cap without invoking CLI',async t=>{
+catalogueTest('actual intake default API admission still pauses at existing full dollar cap without invoking CLI',async t=>{
  const {worker}=await import('../ops/project-manager-worker.mjs');const {root,marker,options}=await fixture(t);const rows='{"at":"2026-11-08T00:00:00Z","projectIds":["OPP-99999"],"model":"fixture","costUsd":25,"status":"reserved","purpose":"project_manager_plan"}\n';await writeFile(join(root,'receipts.jsonl'),rows,{mode:0o600});let paused;
  const result=await worker({directory:root,limit:1,claude:options.executable,onProgress:x=>{if(JSON.parse(x).paused)paused=JSON.parse(x);}});assert.equal(result.generated,0);assert.equal(paused.paused,'compute_budget');await assert.rejects(stat(marker),{code:'ENOENT'});assert.equal(await readFile(join(root,'receipts.jsonl'),'utf8'),rows);
 });
 
-test('subscription intake skips only unknown legacy projects and continues independent work without clearing receipts',async t=>{
+catalogueTest('subscription intake skips only unknown legacy projects and continues independent work without clearing receipts',async t=>{
  const {worker}=await import('../ops/project-manager-worker.mjs');const plan={projectId:'OPP-00002',summary:'Check the original source evidence and establish a reproducible baseline before any research proposal is accepted.',tasks:[{title:'Identify original evidence sources',criteria:'List dated original sources, reproducibility constraints and unresolved questions with attributable evidence.',expectedEffort:'30 minutes'},{title:'Define baseline measurement criteria',criteria:'Record a falsifiable baseline and repeatable measurement method without claiming an achieved research result.',expectedEffort:'30 minutes'}],evidenceNeeded:['Dated original evidence sources'],suggestedSearches:['Original primary evidence sources','Baseline reproducibility measurement method']};
  const {root,marker,options}=await fixture(t,{structuredOutput:{plans:[plan]}});const rows='{"at":"2026-11-08T00:00:00Z","projectIds":["OPP-00001"],"model":"fixture","costUsd":2,"status":"reserved"}\n';await writeFile(join(root,'receipts.jsonl'),rows,{mode:0o600});const progress=[];
  const result=await worker({directory:root,limit:1,claude:options.executable,executableSha256:options.executableSha256,usageSource:'subscription',env:options.env,onProgress:x=>progress.push(JSON.parse(x))});assert.equal(result.generated,1);assert.equal(JSON.parse(await readFile(join(root,'plans.json'),'utf8')).plans[0].projectId,'OPP-00002');assert.deepEqual(progress.find(x=>x.held==='uncertain_prior_execution').heldProjects,['OPP-00001']);assert.equal(await readFile(join(root,'receipts.jsonl'),'utf8'),rows);assert.equal(await readFile(marker,'utf8'),'auth\nmodel\n');

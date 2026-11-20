@@ -1,6 +1,7 @@
 // Survey-part templates derived from the native task (server/survey-part-template.mjs) and
 // served by the public template route when no static row exists.
 import test from 'node:test';
+import { catalogueTest } from './private-catalogue.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -88,7 +89,7 @@ test('a template is derived only from an open or under-review part whose native 
   assert.equal(surveyPartTemplate(TASK_ID, null), null);
 });
 
-test('every published part row is what derivation from its native contract gives, titles aside', async () => {
+catalogueTest('every published part row is what derivation from its native contract gives, titles aside', async () => {
   const { templates } = JSON.parse(await readFile(new URL('../server/survey-templates.json', import.meta.url), 'utf8'));
   const catalogue = catalogueRecords(await loadCatalogue(fileURLToPath(new URL('../catalogue', import.meta.url))));
   const parts = Object.entries(templates).filter(([id]) => /-r[2-9]-p[0-9]+$/.test(id));

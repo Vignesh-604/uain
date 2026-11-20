@@ -47,11 +47,11 @@ test('one UAIN server lists the earning tools under uain_* names and keeps nativ
   const {origin}=await engine(t);
   const {client}=await connect(t,{origin});
   const names=(await client.listTools()).tools.map(x=>x.name);
-  for(const n of ['uain_signer','uain_member_request','uain_contribution','uain_proposals','uain_profiles'])assert.ok(names.includes(n),n+' is listed');
+  for(const n of ['uain_signer','uain_member_request','uain_contribution','uain_proposals','uain_profiles','uain_feedback'])assert.ok(names.includes(n),n+' is listed');
   // Native tools whose names collide with engine tools keep their own contract.
   for(const n of ['uain_guide','uain_find_tasks','uain_tasks','uain_projects','uain_contributions','uain_search_research','uain_native_state'])assert.ok(names.includes(n),n+' stays');
   assert.ok(!names.some(n=>n.startsWith('baink_')),'old names answer but are not listed');
-  assert.deepEqual(Object.keys(ENGINE_ALIASES).sort(),['baink_contribution','baink_member_request','baink_profiles','baink_proposals','baink_signer']);
+  assert.deepEqual(Object.keys(ENGINE_ALIASES).sort(),['baink_contribution','baink_feedback','baink_member_request','baink_profiles','baink_proposals','baink_signer']);
   for(const tool of (await client.listTools()).tools.filter(x=>ENGINE_TOOLS.some(e=>e.name===x.name))){
     assert.match(tool.description,/^[A-Z][a-z]+ /,tool.name+' starts with a verb');
     assert.ok(!/\b(native|central|shield|attested|custody|fence|holder|intent|epoch|projection|baink)\b/i.test(tool.description),tool.name+' uses plain UAIN words');
@@ -269,4 +269,40 @@ test('recovery hints on this server name uain_guide for old names too; descripti
   const tools=(await client.listTools()).tools;
   assert.match(tools.find(x=>x.name==='uain_contribution').description,/current.*use uain_contributions instead/s);
   assert.match(tools.find(x=>x.name==='uain_contributions').description,/archive.*use uain_contribution\./s);
+});
+
+// uain_feedback (20 November 2026): a report to the UAIN team, passed on to baink_feedback unchanged. uain.global
+// charges each caller first (BAINK sees every report from this server and can only limit it as a whole).
+test('uain_feedback passes a report on unchanged, charges the caller first, and never says "not sent" when unsure',async t=>{
+  const seen=[];
+  const server=createServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  const origin=`http://127.0.0.1:${server.address().port}`;
+  const real=createBainkMcp({origins:[origin],admit(){},requesterIp:()=>'test',read:async()=>({}),feedback:async(args)=>{seen.push(args);return{created:true,receipt:{report:'FB-00000000-0000-4000-8000-000000000000',status:'new',receiptToken:args.receiptToken,note:'Received'}}},feedbackStatus:async()=>({status:'resolved',reply:'Fixed.'})});
+  server.on('request',(req,res)=>real(req,res,new URL(req.url,origin)));t.after(()=>new Promise(r=>server.close(r)));
+  let charged=0;
+  const {call}=await connect(t,{origin,feedbackBudget:async()=>(++charged<=1?{allowed:true}:{allowed:false,retryAfter:1800,limit:3})});
+  const report={requestId:'00000000-0000-4000-8000-00000000abcd',category:'bug',summary:'enrol stays pending',stage:'enrol',receiptToken:'a'.repeat(64)};
+  const r=await call('uain_feedback',report);
+  assert.equal(r.isError,false,JSON.stringify(r.data));
+  assert.match(r.data.report,/^FB-/);
+  assert.deepEqual(seen[0],report,'the report reaches BAINK field for field');
+  assert.equal(r.data.nextStep.tool,'uain_feedback','next steps name the UAIN tool');
+  const limited=await call('uain_feedback',{...report,requestId:'00000000-0000-4000-8000-00000000abce'});
+  assert.equal(limited.isError,true);assert.equal(limited.data.error.code,'rate_limited');
+  assert.equal(seen.length,1,'a caller over its allowance never reaches BAINK');
+  const status=await call('uain_feedback',{action:'status',report:'FB-00000000-0000-4000-8000-000000000000',receiptToken:'a'.repeat(64)});
+  assert.equal(status.isError,false);assert.equal(status.data.status,'resolved');
+  assert.equal(charged,2,'reading a status is not charged as a report');
+  const keyed=await call('uain_feedback',{...report,details:'A'.repeat(21)+'_'+'b'.repeat(21)});
+  assert.equal(keyed.isError,true);assert.equal(keyed.data.error.code,'private_key_refused');
+  // A report whose answer is lost: the outcome is unknown and the retry keeps the requestId.
+  const lost=await connect(t,{origin:'http://127.0.0.1:9',fetcher:async()=>{throw new TypeError('fetch failed')},feedbackBudget:async()=>({allowed:true})});
+  const gone=await lost.call('uain_feedback',report);
+  assert.equal(gone.isError,true);assert.equal(gone.data.error.code,'outcome_unknown');
+  assert.match(gone.data.error.message,/same requestId/);
+  // With no per-caller budget wired in, nothing is sent.
+  const unwired=await connect(t,{origin});
+  const none=await unwired.call('uain_feedback',report);
+  assert.equal(none.isError,true);assert.equal(none.data.error.code,'engine_unavailable');
+  assert.equal(seen.length,1);
 });

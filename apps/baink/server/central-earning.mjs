@@ -49,7 +49,7 @@ function reportProof(sink,error,trace){
  const event=proofEvent(error,trace);reportedProofs.add(error);try{Promise.resolve(sink(event)).catch(()=>{});}catch{}
 }
 /** Refusals where the chain or its proof reader could not answer (a paused node, a slow or busy reader), as opposed to a proof that answered but did not check out. */
-const CHAIN_UNAVAILABLE=new Set(['reader_refused','reader_connection_refused','deadline','proof_stale','batch_deadline','batch_closed','batch_capacity']);
+const CHAIN_UNAVAILABLE=new Set(['reader_refused','reader_connection_refused','deadline','proof_stale','batch_deadline','batch_closed','batch_capacity','page_capacity']);
 /** The category of a central_proof_unavailable refusal (never a proof value), whether the chain was unavailable, and whether it was already reported. */
 export function centralProofRefusal(error){
  if(!centralErrors.has(error)||Object.getOwnPropertyDescriptor(error,'status')?.value!==503||Object.getOwnPropertyDescriptor(error,'code')?.value!=='central_proof_unavailable')return null;
@@ -59,6 +59,18 @@ export function centralProofRefusal(error){
 export function createCentralEarningService({store,native,enabled=false,taskRequirements=null,taskAvailability=null,feedbackReader=null,onProofRefusal=null,monotonicNow=()=>performance.now()}){
  const canSend=()=>enabled===true&&native.configured===true&&typeof native.broadcastCentral==='function';
  function holder(user){const raw=typeof user?.publicKey==='string'?Buffer.from(user.publicKey,'base64'):Buffer.alloc(0);check(raw.length===32&&raw.toString('base64')===user.publicKey&&user.address==='uain1'+sha(raw).slice(0,40),401,'invalid_native_holder');return raw.toString('base64url');}
+ // Coherence retry (19 November 2026). Every proved read answers at the chain's latest height, and a
+ // view that needs several reads refuses when an event lands between them (state_coherence). At
+ // 2 s blocks and about one event a minute, a five-read view was refused often enough to stop task
+ // lists and submits. The whole operation runs once more from its first read, under a new root, with
+ // every check unchanged; nothing from the refused attempt is kept. Only read-only work (and prepare,
+ // whose one store write follows its last read) is retried, at most once and only soon after it began.
+ const COHERENT_RETRY_WINDOW_MS=15000;
+ async function coherent(run,signal){
+  const started=monotonicNow(),decided=new WeakMap();let attempt=0;
+  const retried=error=>{if(!error||typeof error!=='object')return false;if(!decided.has(error))decided.set(error,attempt===0&&centralErrors.has(error)&&proofCategories.get(error)==='state_coherence'&&!signal?.aborted&&monotonicNow()-started<COHERENT_RETRY_WINDOW_MS);return decided.get(error);};
+  for(;;attempt++){try{return await run(retried);}catch(error){if(!retried(error))throw error;}}
+ }
  function fresh(p,{historical=false,trace}={}){
   const age=Date.now()-Date.parse(p?.headerTime);
   proofCheck(native.configured===true&&HASH.test(native.pins?.epoch??'')&&HASH.test(native.pins?.verifierSha256??'')&&p?.authority==='native'&&p.chainId===native.pins.chainId&&p.epoch===native.pins.epoch&&p.genesisSha256===native.pins.epoch&&p.verifierSha256===native.pins.verifierSha256,'proof_identity',trace);
@@ -113,7 +125,7 @@ const taskStateFields=['mode','payout','closes_at','select_by','max_entries','en
  const operatorHold=task=>taskAvailability?.forTask(task)??null;
  const withAvailability=task=>{const availability=operatorHold(task);return availability?{...task,availability}:task;};
  const publicProofFields=['authority','chainId','height','appHash','headerTime','maxAgeSeconds','epoch','genesisSha256','verifierSha256'];
- function taskPageProof(p){fresh(p);check(native.timeoutMs===taskPageTimeout);check(['chainId','epoch','verifierSha256'].every(k=>native.pins?.[k]===taskPagePins[k]&&p?.[k]===taskPagePins[k]));}
+ function taskPageProof(p){fresh(p);proofCheck(native.timeoutMs===taskPageTimeout&&['chainId','epoch','verifierSha256'].every(k=>native.pins?.[k]===taskPagePins[k]&&p?.[k]===taskPagePins[k]),'proof_identity');}
  function dropTaskPage(key){const entry=taskPageCache.get(key);if(entry){taskPageBytes-=entry.bytes;taskPageCache.delete(key);}}
  function pruneTaskPages(){const now=monotonicNow();for(const[key,entry]of taskPageCache)if(now>=entry.until)dropTaskPage(key);}
  function cachedTaskPage(key){pruneTaskPages();const entry=taskPageCache.get(key);if(!entry)return null;try{taskPageProof(entry.value.proof);check(entry.reader===native.publicState);return structuredClone(entry.value);}catch(error){taskPageCache.clear();taskPageBytes=0;throw error;}}
@@ -121,12 +133,15 @@ const taskStateFields=['mode','payout','closes_at','select_by','max_entries','en
  async function publicTaskContext(keys,signal){
   const deadline=Date.now()+25000,records={};let head,latest;
   const live=()=>signal.throwIfAborted();
-  async function add(wanted){const missing=[...new Set(wanted)].filter(k=>!Object.hasOwn(records,k));for(let at=0;at<missing.length||!head;at+=32){live();proofCheck(Date.now()<deadline,'deadline');const selected=missing.slice(at,at+32);let c;try{c=await native.publicState({keys:selected},{timeoutMs:Math.max(1,Math.min(8000,native.timeoutMs??8000,deadline-Date.now()))});}catch(error){live();proofCheck(false,readerCategory(error));}live();taskPageProof(c?.proof);const state=c?.state;check(obj(state)&&state.chain_id===c.proof.chainId&&state.height===c.proof.height&&state.app_hash===c.proof.appHash&&num(state.event_count)&&obj(state.records)&&selected.every(k=>Object.hasOwn(state.records,k)));if(head)check(c.proof.appHash===head.proof.appHash&&BigInt(c.proof.height)>=BigInt(latest.proof.height)&&state.event_count===head.state.event_count);else head=c;latest=c;for(const key of selected)records[key]=structuredClone(state.records[key]);}}
+  async function add(wanted){const missing=[...new Set(wanted)].filter(k=>!Object.hasOwn(records,k));for(let at=0;at<missing.length||!head;at+=32){live();proofCheck(Date.now()<deadline,'deadline');const selected=missing.slice(at,at+32);let c;try{c=await native.publicState({keys:selected},{timeoutMs:Math.max(1,Math.min(8000,native.timeoutMs??8000,deadline-Date.now()))});}catch(error){live();proofCheck(false,readerCategory(error));}live();taskPageProof(c?.proof);const state=c?.state;proofCheck(obj(state)&&state.chain_id===c.proof.chainId&&state.height===c.proof.height&&state.app_hash===c.proof.appHash&&num(state.event_count)&&obj(state.records)&&selected.every(k=>Object.hasOwn(state.records,k)),'state_proof_binding');if(head)proofCheck(c.proof.appHash===head.proof.appHash&&BigInt(c.proof.height)>=BigInt(latest.proof.height)&&state.event_count===head.state.event_count,'state_coherence');else head=c;latest=c;for(const key of selected)records[key]=structuredClone(state.records[key]);}}
   await add(keys);
   return{get proof(){return latest.proof},records,add};
  }
  async function loadPublicTaskPage(cursor,limit,signal){
-  const c=await publicTaskContext(['central_task_count'],signal),raw=c.records.central_task_count,count=raw===null?'0':raw;check(num(count));check(BigInt(cursor)<=BigInt(count),400,'invalid_central_cursor');const end=BigInt(cursor)+BigInt(limit)<BigInt(count)?BigInt(cursor)+BigInt(limit):BigInt(count),keys=[];
+  // The count and the first index keys share one proved read (19 November 2026): index order does not
+  // depend on the count, and an index key past the count is a proved absence that is never used.
+  const first=[];for(let n=BigInt(cursor)+1n;n<=BigInt(cursor)+BigInt(Math.min(limit,31));n++)first.push('central_task_index/'+index(n));
+  const c=await publicTaskContext(['central_task_count',...first],signal),raw=c.records.central_task_count,count=raw===null?'0':raw;check(num(count));check(BigInt(cursor)<=BigInt(count),400,'invalid_central_cursor');const end=BigInt(cursor)+BigInt(limit)<BigInt(count)?BigInt(cursor)+BigInt(limit):BigInt(count),keys=[];
   for(let n=BigInt(cursor)+1n;n<=end;n++)keys.push('central_task_index/'+index(n));await c.add(keys);const refs=keys.map(k=>{const ref=c.records[k];check(obj(ref)&&ID.test(ref.id)&&ID.test(ref.project));return ref;});check(new Set(refs.map(r=>r.id)).size===refs.length);await c.add(refs.map(r=>'central_task/'+r.id));
   const tasks=refs.map(ref=>{const task=taskRecord(c.records['central_task/'+ref.id],ref.id);check(task.project===ref.project);return{...withAvailability(Object.fromEntries([...publicTaskFields,...taskStateFields.filter(k=>Object.hasOwn(task,k))].map(k=>[k,structuredClone(task[k])]))),difficulty:difficultyOf(task),...centralTaskClaim(task,operatorHold(task)),status_label:centralTaskStatus(task).status_label};});signal.throwIfAborted();taskPageProof(c.proof);
   return{authority:'native',verified:true,tasks,cursor,nextCursor:String(end),more:end<BigInt(count),total:count,limit,proof:Object.fromEntries(publicProofFields.map(k=>[k,c.proof[k]]))};
@@ -151,7 +166,7 @@ const taskStateFields=['mode','payout','closes_at','select_by','max_entries','en
   return{authority:'native',verified:true,order,state,tasks,cursor,nextCursor:String(next),more,total:count,scanned:String(next-from),limit,...(state==='open'&&from===0n&&!more?{openCount:String(tasks.length)}:{}),proof:Object.fromEntries(publicProofFields.map(k=>[k,c.proof[k]]))};
  }
  function waitPublicTaskPage(job,signal){
-  signal?.throwIfAborted();check(taskPageWaiters<512);const waiter={};job.waiters.add(waiter);taskPageWaiters++;
+  signal?.throwIfAborted();proofCheck(taskPageWaiters<512,'page_capacity');const waiter={};job.waiters.add(waiter);taskPageWaiters++;
   return new Promise((resolve,reject)=>{let done=false;const finish=(error,value)=>{if(done)return;done=true;signal?.removeEventListener('abort',cancel);job.waiters.delete(waiter);taskPageWaiters--;if(!job.done&&job.waiters.size===0)job.controller.abort();error?reject(error):resolve(value);};const cancel=()=>finish(signal.reason??new DOMException('Public task page cancelled','AbortError'));signal?.addEventListener('abort',cancel,{once:true});job.promise.then(value=>{try{signal?.throwIfAborted();taskPageProof(value.proof);finish(null,structuredClone(value));}catch(error){finish(error);}},error=>finish(error));if(signal?.aborted)cancel();});
  }
 const evidenceOperation=(operation,payload)=>EVIDENCE_OPS.includes(operation)||operation==='central_submit'&&Boolean(payload?.revises);
@@ -299,7 +314,7 @@ const evidenceOperation=(operation,payload)=>EVIDENCE_OPS.includes(operation)||o
    task:Object.fromEntries(['id','project','acceptance_digest'].map(k=>[k,t[k]])),solverAward:solver?Object.fromEntries(['submission','task','project','member','role','amount','height'].map(k=>[k,solver[k]])):null,reviewerAward:reviewer?Object.fromEntries(['submission','task','project','member','role','amount','height'].map(k=>[k,reviewer[k]])):null,review,
    provenAbsent:[solverKey,reviewerKey,...(reviewKey?[reviewKey]:[])].filter(k=>c.records[k]===null),proof:c.proof};
  },
- async status(user){
+ async status(user){return coherent(async retried=>{
   const trace={phase:'initial-state'};
   try{
    // A holder that never enrolled has no member record. Prove that absence and say "not enrolled",
@@ -322,8 +337,8 @@ const evidenceOperation=(operation,payload)=>EVIDENCE_OPS.includes(operation)||o
    // The contribution view rides along; when it cannot be read, status still answers and says so.
    let contribution;try{contribution=await contributionWith(c,user.address,c.member,earnings,balanceUnits,Date.now()+20000);}catch{contribution={available:false,reason:'contribution_unavailable',note:'Your contribution list could not be read just now; your points and earnings below are unaffected. Ask again in a minute.'};}
    return{authority:'native',verified:true,enabled:canSend(),active:!!activation,activation,member:user.address,licence:c.member.licence,contribution,earnings,awards,awardsScope:{limit:12,complete:count<=12n,total:earnings.awards,...(count>12n?{more:'GET /api/native/central/awards?cursor='+String(start)}:{})},balanceUnits,balanceScope:'transparent',earningsScope:'ever-earned-central-awards',assetId:'uain-native-coin',symbol:'AI$',decimals:6,proof:c.proof};
-  }catch(error){reportProof(onProofRefusal,error,trace);throw error;}
- },
+  }catch(error){if(!retried(error))reportProof(onProofRefusal,error,trace);throw error;}
+ });},
  /** Every award of this member, newest first, in cursor pages (status shows only the latest 12).
   * cursor is the highest award-index position to read (inclusive; default: the newest), limit 1..50;
   * nextCursor continues below this page.
@@ -349,11 +364,11 @@ const evidenceOperation=(operation,payload)=>EVIDENCE_OPS.includes(operation)||o
  async tasks(user,body={},options={}){
   // options.public is set only by server code (public-tasks.mjs): the same cached page, with no member.
   if(options.public!==true)holder(user);options.signal?.throwIfAborted();check(obj(body)&&Object.keys(body).every(k=>['cursor','limit','order','state'].includes(k)),400,'invalid_central_cursor');const cursor=body.cursor??'0',limit=body.limit??12,order=body.order??'index',state=body.state??'all';check(num(cursor)&&Number.isInteger(limit)&&limit>=1&&limit<=(options.public===true?48:12),400,'invalid_central_cursor');check(['index','newest'].includes(order)&&['all','open'].includes(state),400,'invalid_central_listing');const plainPage=order==='index'&&state==='all',key=plainPage?JSON.stringify({cursor,limit}):JSON.stringify({cursor,limit,order,state}),cached=cachedTaskPage(key);if(cached)return cached;let job=taskPageFlights.get(key);
-  check(taskPageWaiters<512);if(job)check(!job.controller.signal.aborted);else{check(taskPageFlights.size<16);job={controller:new AbortController(),waiters:new Set(),done:false,promise:null};taskPageFlights.set(key,job);job.promise=Promise.resolve().then(()=>plainPage?loadPublicTaskPage(cursor,limit,job.controller.signal):loadPublicTaskScan(cursor,limit,order,state,job.controller.signal)).then(value=>{job.controller.signal.throwIfAborted();retainTaskPage(key,value);return value;},error=>{dropTaskPage(key);throw error;}).finally(()=>{job.done=true;if(taskPageFlights.get(key)===job)taskPageFlights.delete(key);});job.promise.catch(()=>{});}return waitPublicTaskPage(job,options.signal);
+  proofCheck(taskPageWaiters<512,'page_capacity');if(job)check(!job.controller.signal.aborted);else{proofCheck(taskPageFlights.size<16,'page_capacity');job={controller:new AbortController(),waiters:new Set(),done:false,promise:null};taskPageFlights.set(key,job);job.promise=Promise.resolve().then(()=>coherent(()=>plainPage?loadPublicTaskPage(cursor,limit,job.controller.signal):loadPublicTaskScan(cursor,limit,order,state,job.controller.signal),job.controller.signal)).then(value=>{job.controller.signal.throwIfAborted();retainTaskPage(key,value);return value;},error=>{dropTaskPage(key);throw error;}).finally(()=>{job.done=true;if(taskPageFlights.get(key)===job)taskPageFlights.delete(key);});job.promise.catch(()=>{});}return waitPublicTaskPage(job,options.signal);
  },
  // One proved public task record for an unauthenticated reader (the survey-part template).
  // No holder authority; null when native is not configured or the task is proved absent.
- async publicTask(id,options={}){check(typeof id==='string'&&ID.test(id)&&obj(options),400,'invalid_central_task');if(native.configured!==true)return null;const key='central_task/'+id,c=await publicTaskContext([key],options.signal??new AbortController().signal);if(c.records[key]===null)return null;const task=taskRecord(c.records[key],id);taskPageProof(c.proof);return{authority:'native',verified:true,task:structuredClone(task),proof:Object.fromEntries(publicProofFields.map(k=>[k,c.proof[k]]))};},
+ async publicTask(id,options={}){check(typeof id==='string'&&ID.test(id)&&obj(options),400,'invalid_central_task');if(native.configured!==true)return null;const key='central_task/'+id,c=await coherent(()=>publicTaskContext([key],options.signal??new AbortController().signal),options.signal);if(c.records[key]===null)return null;const task=taskRecord(c.records[key],id);taskPageProof(c.proof);return{authority:'native',verified:true,task:structuredClone(task),proof:Object.fromEntries(publicProofFields.map(k=>[k,c.proof[k]]))};},
  async task(user,id){const c=await context(user,['central_earning_activation'],true),selection=await selectedTask(c,user,id),requirements=taskRequirements?.forTask(selection.task)??{available:false,reason:"not_published"};return{authority:'native',verified:true,active:!!active(c),...selection,task:withAvailability(selection.task),...(operatorHold(selection.task)?{availability:operatorHold(selection.task)}:{}),requirements,difficulty:estimateTaskDifficulty(selection.task,{requirements}),status_label:centralTaskStatus(selection.task).status_label,...centralMemberClaim(selection.task,{availability:operatorHold(selection.task),licence:c.member.licence,joined:selection.joined,selfReviewer:active(c)?.reviewer===user.address,projectActive:selection.project.state==='active'&&!selection.project.safety_halted,reviewActive:!!active(c)}),proof:c.proof};},
  list(user,{limit,id}={}){holder(user);const all=Object.values(store.read().centralEarningIntents??{}).filter(i=>i.member===user.address).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
       // No option: every step (the kit reads them all). limit: the newest that many. id: that one step, or none.
@@ -371,5 +386,7 @@ const evidenceOperation=(operation,payload)=>EVIDENCE_OPS.includes(operation)||o
    const saved=await store.transact(s=>{const current=s.centralEarningIntents[id];if(current.status==='finalized'||current.status==='expired-unused')return current;fresh(c.proof);check(Date.now()<c.deadline);if(BigInt(current.scanCursor??current.afterEvent)<end)current.scanCursor=String(end);current.moreEvents=end<count;if(recovery){check(current.commandDigest===i.commandDigest&&current.transactionHash===i.transactionHash&&current.sendAttemptedAt===i.sendAttemptedAt&&canonicalJSON(current.envelope)===canonicalJSON(i.envelope),409,'central_envelope_conflict');current.status='expired-unused';current.recovery=recovery;current.moreEvents=false;current.updatedAt=new Date().toISOString();}return current;});return{intent:view(saved)};}}
   proofCheck(Date.now()<c.deadline,'deadline');let reply;try{reply=await native.publicState({member:user.address,keys:[],receipt:{envelope:i.envelope,event_id:eventId}},{timeoutMs:Math.max(1,c.deadline-Date.now())});}catch(error){proofCheck(false,readerCategory(error));}fresh(reply?.proof);const r={...reply?.state?.receipt,proof:reply?.proof};receiptShape(i,r);check(r.event.id===eventId&&reply.state.chain_id===r.chain_id&&reply.state.height===r.state_height&&reply.state.app_hash===r.app_hash&&reply.state.member?.id===user.address&&reply.state.member.public_key===i.publicKey&&num(reply.state.member.sequence)&&BigInt(reply.state.member.sequence)>BigInt(i.command.sequence));
   const key=i.command.operation==='central_submit'?'central_submission/'+i.command.payload.id:EVIDENCE_OPS.includes(i.command.operation)?'central_submission/'+i.command.payload.submission:'participation/'+i.command.payload.project+'/'+user.address+'/';await c.add([key]);check(BigInt(c.proof.height)>=BigInt(r.state_height));const record=c.records[key];if(i.command.operation==='central_submit'){const p=i.command.payload;check(record?.id===p.id&&record.task===p.task&&record.author===user.address&&!record.author_instance&&record.evidence===p.evidence&&record.evidence_digest===p.evidence_digest&&record.height===r.event.height&&(record.revises??'')===(p.revises??''));}else if(i.command.operation==='central_reassess')check(record?.id===i.command.payload.submission&&record.reassess===true);else if(i.command.operation==='central_evidence_expire')check(record?.id===i.command.payload.submission&&record.state==='expired');else check(record?.project===i.command.payload.project&&record.member===user.address&&!record.instance);const saved=await store.transact(s=>{const current=s.centralEarningIntents[id];if(current.status==='finalized')return current;fresh(c.proof);check(Date.now()<c.deadline);current.status='finalized';current.scanCursor=eventId;current.moreEvents=false;current.receipt=r;current.result={verified:true,status:{central_submit:'submitted',central_reassess:'reassessment_requested',central_evidence_expire:'expired'}[i.command.operation]??'joined',paid:false,recordKey:key,proof:c.proof};current.updatedAt=new Date().toISOString();return current;});native.invalidateAccount?.(user.address);return{intent:view(saved)};}
- };return Object.freeze(service);
+ };
+ for(const name of ['submission','awards','task','prepare']){const once=service[name];service[name]=function(...args){return coherent(()=>once.apply(this,args));};}
+ return Object.freeze(service);
 }

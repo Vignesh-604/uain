@@ -1,3 +1,4 @@
+import { createMemberOrigins, signupOrigin, RELAY_SIGNUP } from './admin-member-origins.mjs';
 import {createInitialProjectTasks} from './initial-project-tasks.mjs';
 import {createNativeStateSSH} from './native-state-ssh.mjs';
 import { createChangeTracker, diffStates, exportStateJson, openStateDatabase, StateWriter } from './store-sqlite.mjs';
@@ -96,6 +97,8 @@ import {
   readBody,
 } from "./routes/context.mjs";
 import { createPublicRoutes } from "./routes/public.mjs";
+import { createFeedbackRoutes } from "./routes/feedback.mjs";
+import { createFeedback, slackNotifier } from "./feedback.mjs";
 import { createPublicTasks } from "./public-tasks.mjs";
 import { createReviewQueue } from "./review-queue.mjs";
 import { createManagementRoutes } from "./routes/management.mjs";
@@ -640,10 +643,28 @@ export async function createBainkServer(options = {}) {
   const campaignOperators = new Set(options.campaignOperatorAddresses ?? []);
   const campaignKarma = options.campaignAcceptedTask ?? karmaReader();
   // /admin: email + password, read-only campaign dashboard (docs/admin.md).
+  const memberOrigins = createMemberOrigins(dataDir);
+  // Reports from members and newcomers (feedback.mjs): a private inbox with its own store, and a
+  // short notice to the team's alerts channel when the private webhook is configured.
+  const feedback = createFeedback({
+    dataDir,
+    enabled: options.feedbackEnabled !== false,
+    notifier: options.feedbackNotifier ?? (options.feedbackAlertWebhook ? slackNotifier(options.feedbackAlertWebhook) : null),
+    adminOrigin: options.publicOrigin ?? null,
+    // Servers that relay reports for many callers (uain.global/mcp) share one larger allowance.
+    serviceRequesters: (options.signupServiceIps ?? []).map((ip) => String(ip).replace(/^::ffff:/, "")),
+    limits: options.feedbackLimits ?? {},
+    onError: (error) => options.onError?.(Object.assign(error ?? {}, { code: error?.code ?? "feedback_notify_failed" })),
+  });
+  const feedbackRequester = (req) => clientBucket(String(requesterIp(req)).replace(/^::ffff:/, ""));
   const admin = createAdmin({
+    feedback,
     dataDir,
     campaigns,
     acceptedTask: campaignKarma,
+    members: typeof campaignKarma.members === "function" ? campaignKarma.members : undefined,
+    memberAccounts: () => campaigns.memberAccounts(),
+    memberOrigins: memberOrigins.read,
     uainOrigin,
     // An IPv6 client is one /64 here too (B1-6).
     clientIp: (req) => clientBucket(requesterIp(req)),
@@ -1297,6 +1318,7 @@ export async function createBainkServer(options = {}) {
       method,
       url: path,
       socket: outer.socket,
+      [RELAY_SIGNUP]: true,
       headers: {
         host,
         origin: origins.find((o) => new URL(o).host === host) ?? audience,
@@ -1333,6 +1355,8 @@ export async function createBainkServer(options = {}) {
     admit,
     requesterIp,
     forward: relayMember,
+    feedback: (args, req) => feedback.create(args, { requester: feedbackRequester(req) }),
+    feedbackStatus: (args, req) => feedback.status(args.report, args.receiptToken, feedbackRequester(req)),
     async read(name, args, requestAudience) {
       if (name === "baink_status") return publicConfig(requestAudience);
       if (name === "baink_tasks") {
@@ -1408,12 +1432,14 @@ export async function createBainkServer(options = {}) {
         return ctx.send(200, await campaigns.report({ acceptedTask: campaignKarma }));
       },
     },
+    createFeedbackRoutes({ feedback, requester: feedbackRequester }),
     createPublicRoutes({ publicConfig, centralEarning, publicTasks, reviewQueue,
       // The public contribution read costs proved reads: 30 a minute for each address asking.
       admitPublic: (ctx) => admit(`public-contribution-ip:${requesterIp(ctx.req)}`, 30, 60_000) }),
     createIdentityRoutes({
       store, nativeAsset, accountBatchingEnabled, profiles, endorsements,
       memberDirectory, nativeResearch, messages, campaigns,
+      recordSignup: (account, req) => memberOrigins.record(account.address, account.createdAt, signupOrigin(req, { trustProxy: options.trustProxy, serviceIps: options.signupServiceIps ?? [] })),
     }),
     createWorkRoutes({
       store, publicReview, reviewCall, publicProjects, projectDetails,
@@ -1802,6 +1828,7 @@ export async function createBainkServer(options = {}) {
       if (sequenceFenceTimer) clearInterval(sequenceFenceTimer);
       if (tradeDealTimer) clearInterval(tradeDealTimer);
       await campaigns.close();
+      await feedback.close();
       while (managementCycling) await new Promise((r) => setTimeout(r, 10));
       management.close();
       await publicReview?.close();

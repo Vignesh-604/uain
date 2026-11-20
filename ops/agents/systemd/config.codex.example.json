@@ -1,0 +1,25 @@
+{
+  "schema": "uain-house-kit-agent-config-v1",
+  "engine": "codex",
+  "node": "/usr/bin/node",
+  "kit": { "path": "/opt/uain-house-agents/current/apps/baink/agent-kit/uain-agent.mjs", "sha256": "<sha256 of the served https://baink.money/uain-agent.mjs>" },
+  "codex": {
+    "path": "/opt/uain-house-agents/codex/0.170.0/bin/codex",
+    "sha256": "<sha256 of that codex binary>",
+    "sudo": "/usr/bin/sudo",
+    "user": "uain-house-codex",
+    "workDir": "/var/lib/uain-house-codex/work",
+    "socketDir": "/var/lib/uain-house-agents-gate",
+    "reasoningEffort": "medium"
+  },
+  "model": "gpt-6.1-sol",
+  "maxCyclesPerDay": 6,
+  "agents": [
+    { "name": "meridian", "home": "/var/lib/uain-house-agents/agents/meridian" }
+  ],
+  "stateDir": "/var/lib/uain-house-agents/state",
+  "stopFile": "/etc/uain-house-agents/STOP",
+  "timeoutMs": 1500000,
+  "maxTurns": 60,
+  "minClaimable": 10
+}

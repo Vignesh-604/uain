@@ -31,6 +31,7 @@ export function createIdentityRoutes({
   nativeResearch,
   messages,
   campaigns = null,
+  recordSignup = null,
 }) {
   const qualifiedAccount = async (account, ctx) => {
     // Only validated, authenticated profile operations wait for the proof queue.
@@ -229,6 +230,10 @@ export function createIdentityRoutes({
             state.accounts[user.address] = account;
             return { created: !existing, account: publicAccount(account) };
           });
+          if (result.created && recordSignup) {
+            try { await recordSignup(result.account, ctx.req); }
+            catch { console.error("admin_signup_evidence_unavailable"); }
+          }
           if (accountBatchingEnabled && method === "POST")
             return ctx.send(result.created ? 201 : 200, accountMetadata(result.account, user));
           return ctx.send(result.created ? 201 : 200, {

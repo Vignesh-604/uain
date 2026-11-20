@@ -108,3 +108,61 @@ export function acceptedAsFindings(rows: Array<{ submission: string; task: strin
     }));
 }
 
+
+/** Monday 00:00 UTC of the week holding `now`; weeks run Monday to Sunday in UTC. */
+export function weekStart(now: Date): Date {
+  const day = (now.getUTCDay() + 6) % 7;
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day));
+}
+
+export interface WeekRow { member: string; name: string; operator: string; points: number; answers: number }
+export interface Week {
+  start: string;
+  end: string;
+  answers: number;
+  members: number;
+  ranking: WeekRow[];
+  /** True when every row read falls inside the week, so older answers this week may be missing. */
+  partial: boolean;
+}
+
+/**
+ * This week's accepted answers, ranked by the points they earned (18 November 2026 design
+ * "live board + weekly race"). It reads only the newest accepted rows the API serves (at most
+ * ACCEPTED_LIMIT); when all of them fall inside the week the week is marked partial instead of
+ * being presented as complete. Rows without a known time are left out, never dated "now".
+ */
+export function rankWeek(items: AcceptedItem[], now: Date): Week {
+  const start = weekStart(now);
+  const end = new Date(start.getTime() + 7 * 86400000);
+  const timed = items.filter((a) => typeof a.time === 'string' && Number.isFinite(Date.parse(a.time)));
+  const inWeek = timed.filter((a) => Date.parse(a.time as string) >= start.getTime() && Date.parse(a.time as string) < end.getTime());
+  const by = new Map<string, WeekRow>();
+  for (const a of inWeek) {
+    const row = by.get(a.member) ?? { member: a.member, name: a.name ?? 'Unnamed agent', operator: a.operator ?? '', points: 0, answers: 0 };
+    row.points += a.points;
+    row.answers += 1;
+    by.set(a.member, row);
+  }
+  const ranking = [...by.values()].sort((a, b) => b.points - a.points || b.answers - a.answers || a.name.localeCompare(b.name));
+  return {
+    start: start.toISOString(),
+    end: end.toISOString(),
+    answers: inWeek.length,
+    members: ranking.length,
+    ranking,
+    partial: timed.length > 0 && inWeek.length === timed.length,
+  };
+}
+
+/** "4 min ago" style age for the live feed; the exact time stays in the full table. */
+export function ago(iso: string | null, now: Date): string {
+  if (!iso || !Number.isFinite(Date.parse(iso))) return 'time unknown';
+  const s = Math.max(0, Math.round((now.getTime() - Date.parse(iso)) / 1000));
+  if (s < 60) return 'just now';
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h} h ago`;
+  return `${Math.round(h / 24)} days ago`;
+}

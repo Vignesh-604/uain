@@ -91,6 +91,13 @@ export const RATE_LIMITS = {
     limit: envInt('UAIN_RATE_ENGINE_CALLS_PER_MIN', 30),
     windowMs: 60_000,
   },
+  // Reports to the UAIN team (uain_feedback, 20 November 2026), per caller, charged here before a
+  // report is passed on: BAINK sees every report from this server's own address and can only give
+  // uain.global one shared allowance, so one caller must not use up everyone else's.
+  feedback: {
+    limit: envInt('UAIN_RATE_FEEDBACK_PER_HOUR', 3),
+    windowMs: 3_600_000,
+  },
 };
 
 export type RateBucket = keyof typeof RATE_LIMITS;

@@ -1,3 +1,4 @@
+import { catalogueTest, catalogueSkip } from './private-catalogue.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
@@ -126,7 +127,7 @@ test('the projection drops credentials, provider costs and unlisted evidence fie
   assert.equal(r.body.projects.length, 1);
 });
 
-test('public discovery stays separate: drafts are never funded or payable and no organization rows leak', async (t) => {
+catalogueTest('public discovery stays separate: drafts are never funded or payable and no organization rows leak', async (t) => {
   const { combined } = await reports(t);
   const f = await fixture(t, { catalogueDir: new URL('../catalogue/', import.meta.url).pathname, organizationsStatus: { path: combined, operators: [member().address] } });
   let r = await f.request(null, 'GET', '/api/work/projects?pageSize=100');
