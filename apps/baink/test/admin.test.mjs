@@ -354,8 +354,8 @@ test('replies: Replied needs a URL, Skip hides it, a skipped thread cannot come 
   // An account through the replied reply counts under Replies, not Posts.
   const a = member();
   await f.request(a, 'POST', '/api/account', { displayName: 'A', via: 'rd-reply-01' });
-  const numbers = await (await go('/admin', { headers: { Cookie: cookie } })).text();
-  const [postsPart, repliesPart] = numbers.split('<h2>Replies</h2>');
+  const postsPart = await (await go('/admin?tab=posts', { headers: { Cookie: cookie } })).text();
+  const repliesPart = await (await go('/admin?tab=replies', { headers: { Cookie: cookie } })).text();
   assert.match(repliesPart, /Spare limits 1<\/a> <a href="https:\/\/www\.reddit\.com\/r\/ClaudeAI\/comments\/abc1\/x\/c1"[^]*?<td>0<\/td><td>1<\/td>/);
   assert.doesNotMatch(repliesPart, /Spare limits 2/, 'skipped replies stay out of Numbers');
   assert.doesNotMatch(postsPart, /Spare limits/);
@@ -510,12 +510,12 @@ test('Members includes unattributed members, explicit classes, unknown reads, an
   await f.request(a, 'POST', '/api/account', { displayName: 'Local account', via: 'x-aldi-01' });
   const logged = await login('aldi@example.com', PASSWORD);
   const html = async (q = '') => (await go('/admin' + q, { headers: { Cookie: cookieOf(logged) } })).text();
-  let page = await html('?sort=reads&dir=desc');
+  let page = await html('?tab=members&sort=reads&dir=desc');
   assert.match(page, /<h2>Members<\/h2>/);
   assert.match(page, /Outside &lt;agent&gt;/);
-  assert.match(page, /Unknown \/ unattributed<\/td><td>External<\/td><td>300/);
-  assert.match(page, /Team-test<\/td><td>20/);
-  assert.match(page, /Unclassified<\/td><td>0/);
+  assert.match(page, /Unknown \/ unattributed<\/td><td>External<\/td><td>Unknown<\/td><td>300/);
+  assert.match(page, /Team-test<\/td><td>Unknown<\/td><td>20/);
+  assert.match(page, /Unclassified<\/td><td>Unknown<\/td><td>0/);
   assert.match(page, /x-aldi-01<\/td><td>Unclassified/);
   assert.match(page, /accounts, not people/);
   assert.doesNotMatch(page, /Archived identity/);
@@ -524,8 +524,39 @@ test('Members includes unattributed members, explicit classes, unknown reads, an
   page = await html('?memberSort=karma&memberDir=asc');
   assert.ok(page.indexOf('>Team<') < page.indexOf('Outside &lt;agent&gt;'));
   list = null;
-  page = await html();
+  page = await html("?tab=members");
   assert.match(page, /Member list unreadable/);
-  assert.match(page, /Unclassified<\/td><td>Unknown/);
+  assert.match(page, /Unclassified<\/td><td>Unknown<\/td><td>Unknown/);
   assert.doesNotMatch(page, /<td>0<\/td><\/tr><\/tbody><\/table><\/section>/);
+});
+
+
+test('Numbers tabs isolate tables and signup grouping preserves unknowns and private disclosure', async t => {
+  const read=async()=>false;
+  read.members=async()=>[{address:'a',name:'Alpha',karma:4},{address:'b',name:'Beta',karma:6},{address:'c',name:'Gamma',karma:null},{address:'d',name:'Delta',karma:null}];
+  const {f,go,login}=await setup(t,{campaignAcceptedTask:read});
+  await writeFile(join(f.dataDir,'admin-member-origins.json'),JSON.stringify({a:{ip:'203.0.113.1',location:'Test city <place>'},b:{ip:'203.0.113.1',location:'Test city <place>'}}));
+  const cookie=cookieOf(await login('aldi@example.com',PASSWORD));
+  const get=async q=>(await go('/admin?'+q,{headers:{Cookie:cookie}})).text();
+  let page=await get('tab=members&groupBy=ip&sort=reads&dir=asc');
+  assert.match(page,/2 accounts · 10 known Karma/);
+  assert.equal((page.match(/signup IP unknown<\/th>/g)||[]).length,2);
+  assert.match(page,/<details><summary>Reveal signup IP<\/summary><code>203.0.113.1/);
+  assert.match(page,/Test city &lt;place&gt;/);assert.doesNotMatch(page,/<h2>Posts/);
+  assert.match(page,/tab=members&amp;groupBy=ip&amp;sort=reads&amp;dir=asc&amp;memberSort=/);
+  assert.match(page,/Same IP does not prove the same person/);
+  page=await get('tab=posts');assert.match(page,/<h2>Posts/);assert.doesNotMatch(page,/<h2>Members/);
+  page=await get('tab=replies');assert.match(page,/<h2>Replies/);assert.doesNotMatch(page,/<h2>Posts/);
+  const publicPage=await (await go('/admin?tab=members')).text();assert.doesNotMatch(publicPage,/203.0.113.1|Test city/);
+});
+
+test('signup evidence never leaks into account responses or scoped marketing reads', async t => {
+  const {f,go,login}=await setup(t,{trustProxy:true});
+  const a=member();
+  const created=await f.request(a,'POST','/api/account',{displayName:'Privacy test'});
+  const value=JSON.stringify(created);
+  assert.doesNotMatch(value,/direct-peer|trusted-ingress|signupIp|location/);
+  const data=JSON.parse(await (await import('node:fs/promises')).readFile(join(f.dataDir,'admin-member-origins.json'),'utf8'));
+  assert.ok(data[a.address]);
+  assert.equal(data[a.address].ip,null,'loopback without trusted original IP is unavailable');
 });

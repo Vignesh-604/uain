@@ -1,3 +1,4 @@
+import { createMemberOrigins, signupOrigin, RELAY_SIGNUP } from './admin-member-origins.mjs';
 import {createInitialProjectTasks} from './initial-project-tasks.mjs';
 import {createNativeStateSSH} from './native-state-ssh.mjs';
 import { createChangeTracker, diffStates, exportStateJson, openStateDatabase, StateWriter } from './store-sqlite.mjs';
@@ -640,12 +641,14 @@ export async function createBainkServer(options = {}) {
   const campaignOperators = new Set(options.campaignOperatorAddresses ?? []);
   const campaignKarma = options.campaignAcceptedTask ?? karmaReader();
   // /admin: email + password, read-only campaign dashboard (docs/admin.md).
+  const memberOrigins = createMemberOrigins(dataDir);
   const admin = createAdmin({
     dataDir,
     campaigns,
     acceptedTask: campaignKarma,
     members: typeof campaignKarma.members === "function" ? campaignKarma.members : undefined,
     memberAccounts: () => campaigns.memberAccounts(),
+    memberOrigins: memberOrigins.read,
     uainOrigin,
     // An IPv6 client is one /64 here too (B1-6).
     clientIp: (req) => clientBucket(requesterIp(req)),
@@ -1299,6 +1302,7 @@ export async function createBainkServer(options = {}) {
       method,
       url: path,
       socket: outer.socket,
+      [RELAY_SIGNUP]: true,
       headers: {
         host,
         origin: origins.find((o) => new URL(o).host === host) ?? audience,
@@ -1416,6 +1420,7 @@ export async function createBainkServer(options = {}) {
     createIdentityRoutes({
       store, nativeAsset, accountBatchingEnabled, profiles, endorsements,
       memberDirectory, nativeResearch, messages, campaigns,
+      recordSignup: (account, req) => memberOrigins.record(account.address, account.createdAt, signupOrigin(req, { trustProxy: options.trustProxy, serviceIps: options.signupServiceIps ?? [] })),
     }),
     createWorkRoutes({
       store, publicReview, reviewCall, publicProjects, projectDetails,
