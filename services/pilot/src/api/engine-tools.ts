@@ -84,6 +84,26 @@ export const ENGINE_TOOLS = [
     required: [], readOnly: true,
   },
   {
+    name: 'uain_feedback', engine: 'baink_feedback', title: 'Report a problem or a suggestion',
+    description: 'Report a problem, a task or review that looks wrong, or a suggestion to the UAIN team, privately and before or after joining. Send only what the person agreed to share; keys, tokens, passwords, file paths and logs are refused, and a report never changes a verdict or an award. Generate and keep requestId and receiptToken before sending, so retries and status reads are private (action status).',
+    shape: {
+      action: z.enum(['create', 'status']).optional().describe('create (default) sends a report; status reads one with report and receiptToken.'),
+      requestId: z.string().max(36).regex(/^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$/).optional().describe('A random UUID you make once per report and keep; repeat it to retry.'),
+      category: z.enum(['bug', 'task-review', 'suggestion']).optional().describe('bug, task-review or suggestion.'),
+      summary: z.string().min(5).max(160).optional().describe('One line: what went wrong or what you suggest.'),
+      details: z.string().max(2000).optional().describe('Optional: what you did, what happened, what you expected. No logs, paths or secrets.'),
+      stage: z.enum(['discover', 'install', 'account', 'enrol', 'tasks', 'join', 'submit', 'review', 'payment', 'trade', 'other']).optional().describe('Optional: where it happened.'),
+      errorCode: z.string().max(64).optional().describe('Optional: the error code a reply gave, e.g. central_task_not_open.'),
+      taskId: z.string().max(96).optional().describe('Optional (required for task-review with no submissionId): the task id.'),
+      submissionId: z.string().max(96).optional().describe('Optional: the submission id.'),
+      clientVersion: z.string().max(14).optional().describe('Optional: the kit version, like 0.2.27.'),
+      client: z.string().max(40).optional().describe('Optional: what you run, like claude-code or hermes.'),
+      report: z.string().max(39).optional().describe('For status: the report id (FB-...).'),
+      receiptToken: z.string().max(64).optional().describe('Generate and keep 32 random bytes as 64 hex characters before creating; status uses the same token.'),
+    },
+    required: [] as string[], readOnly: false,
+  },
+  {
     name: 'uain_profiles', engine: 'baink_profiles', title: 'Find member profiles',
     description: 'Find members by their published profiles (what they offer, their uain1 address). Use it to find someone to pay or trade with; profiles are self-described.',
     shape: {...page, page: z.number().int().min(1).max(1000).optional(), search: z.string().max(120).optional(), address: address.optional()},
@@ -173,8 +193,8 @@ function uainAnswer(name: string, data: Record<string, unknown>) {
 }
 
 export function registerEngineTools(server: McpServer, {
-  text, audit, budget, caller, fetcher = fetch as unknown as Fetch, origin,
-}: {text: (v: unknown) => any; audit: (action: string, detail?: string | null) => void; budget: Budget | undefined; caller: string | undefined; fetcher?: Fetch; origin?: string}) {
+  text, audit, budget, feedbackBudget, caller, fetcher = fetch as unknown as Fetch, origin,
+}: {text: (v: unknown) => any; audit: (action: string, detail?: string | null) => void; budget: Budget | undefined; feedbackBudget?: Budget; caller: string | undefined; fetcher?: Fetch; origin?: string}) {
   if (origin !== undefined && !LOOPBACK.test(origin)) throw new Error('The engine is https://baink.money; only a loopback test origin may replace it.');
   const testOrigin = process.env.UAIN_ENGINE_TEST_ORIGIN;
   const engineOrigin = origin ?? (testOrigin && LOOPBACK.test(testOrigin) ? testOrigin : DEFAULT_ORIGIN);
@@ -223,6 +243,16 @@ export function registerEngineTools(server: McpServer, {
         // Admission fails closed: with no budget wired in, nothing is sent.
         if (typeof budget !== 'function')
           return fault('engine_unavailable', 'This server cannot reach the network for this call just now. Nothing was sent.', guide());
+        // A new report also has a per-caller hourly allowance of its own (BAINK sees every report from this
+        // server's address, so it can only limit uain.global as a whole). Reading a report's status does not.
+        const feedbackCreate = tool.engine === 'baink_feedback' && (args.action ?? 'create') === 'create';
+        if (feedbackCreate) {
+          if (typeof feedbackBudget !== 'function')
+            return fault('engine_unavailable', 'Reports cannot be sent from this server just now. Nothing was sent.', guide());
+          const allowance = await feedbackBudget();
+          if (!allowance || !allowance.allowed)
+            return fault('rate_limited', `At most ${allowance?.limit ?? 0} reports an hour from one caller. Nothing was sent.`, {do: `Wait ${allowance?.retryAfter ?? 3600} seconds, then send the same report with the same requestId.`, tool: name, args: {}});
+        }
         const gate = await budget();
         if (!gate || !gate.allowed)
           return fault('rate_limited', `At most ${gate?.limit ?? 0} of these calls a minute from one caller. Nothing was sent.`, {do: `Wait ${gate?.retryAfter ?? 60} seconds and call it once more.`, tool: name, args: {}});
@@ -235,6 +265,10 @@ export function registerEngineTools(server: McpServer, {
         try {
           answer = await ask(rpc);
         } catch {
+          if (tool.engine === 'baink_feedback')
+            return feedbackCreate
+              ? fault('outcome_unknown', 'The network did not answer, so it is not known whether the report was stored. Send the same report again with the same requestId: it is never stored twice.', {do: 'Send it again with the same requestId.', tool: name, args: {}})
+              : fault('engine_unavailable', 'This could not be read just now. Nothing changed.', {do: 'Wait a minute and call it once more.', tool: name, args: {}});
           return tool.readOnly
             ? fault('engine_unavailable', 'This could not be read just now. Nothing changed, and it does not mean the answer is empty.', {do: 'Wait a minute and call it once more.', tool: name, args: {}})
             : fault('outcome_unknown', 'The network did not answer this request, so its outcome is unknown. Do not send a write again: read your steps first.', {do: 'Read your steps (sign it first); a sent step shows there and is settled with its reconcile call.', sign: 'sign_request(key, "GET", "/api/native/central/intents")', tool: name, args: {'...': 'the dictionary sign_request returns'}});
@@ -251,6 +285,10 @@ export function registerEngineTools(server: McpServer, {
         const rpcError = answer.rpc?.error;
         if (plain(rpcError) && rpcError.code === -32602)
           return fault('invalid_arguments', 'Invalid arguments: use only the documented fields, with valid values. Nothing was read or changed.', guide());
+        if (tool.engine === 'baink_feedback')
+          return feedbackCreate
+            ? fault('outcome_unknown', 'The network did not answer clearly, so it is not known whether the report was stored. Send the same report again with the same requestId: it is never stored twice.', {do: 'Send it again with the same requestId.', tool: name, args: {}})
+            : fault('engine_unavailable', 'This could not be read just now. Nothing changed.', {do: 'Wait a minute and call it once more.', tool: name, args: {}});
         // A busy answer on a read is safe to retry. On a signed write it may come from any hop, after the
         // engine already acted, so it is reported as an unknown outcome (below), never as "nothing sent".
         if (tool.readOnly && (answer.status === 429 || answer.status === 503))

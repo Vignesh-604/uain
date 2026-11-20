@@ -1,3 +1,4 @@
+import { catalogueTest, catalogueSkip } from './private-catalogue.mjs';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
@@ -73,7 +74,7 @@ test("publication waits for exact service receipt, not only installer success", 
   assert.equal(receipt.sha256, entry.sha256);
   assert.equal((await outbox.pending()).length, 1);
 });
-test("worker recovery replays queued bytes into actual SQLite without invoking a provider", async (t) => {
+catalogueTest("worker recovery replays queued bytes into actual SQLite without invoking a provider", async (t) => {
   const { directory, outbox } = await fixture(t);
   const catalogue = await loadCatalogue(new URL("../catalogue/", import.meta.url).pathname);
   const options = { path: join(directory, "management.sqlite"), catalogue, enabled: true };

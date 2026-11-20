@@ -1,0 +1,11 @@
+{
+  "skills": [
+    {
+      "name": "uain-discovery",
+      "description": "Find UAIN research tasks, join with operator approval, complete one task and check its review.",
+      "files": [
+        "SKILL.md"
+      ]
+    }
+  ]
+}

@@ -8,7 +8,9 @@
  * membership; submission and review happen through BAINK. */
 import {createHash} from 'node:crypto';
 import {CENTRAL_TASK_HOLDS} from './central-task-holds.ts';
-export const CENTRAL_DISCOVERY_LIMIT=512;
+/** A hard bound on one discovery read: beyond it the result is `truncated` and /tasks refuses to
+ * present an incomplete catalogue (19 November 2026: raised from 512 once the chain passed 512 tasks). */
+export const CENTRAL_DISCOVERY_LIMIT=4096;
 export const CENTRAL_RETRY_MS=60000;
 const ID=/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/,HASH=/^[a-f0-9]{64}$/,UNITS=/^(0|[1-9][0-9]{0,30})$/,COUNT=/^(0|[1-9][0-9]{0,19})$/;
 const SURVEY=/-prior-art-survey(-r[2-9]-p\d+)?$/;
@@ -16,8 +18,6 @@ const obj=(v:any)=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const sha=(s:string)=>createHash('sha256').update(s).digest('hex');
 const fail=(why:string)=>{throw Error('native central task proof differs: '+why)};
 export type CentralRead=(keys:string[])=>Promise<Record<string,any>>;
-/** Read the newest `limit` central tasks (newest first). Throws on any record
- * that does not match the chain's shape, so a caller can fail soft as a whole. */
 /** The native bridge proves at most 32 keys per read (chain/client/native-bridge.mjs);
  * larger selections are refused, so every read here goes in chunks of 32, two at a time. */
 export const CENTRAL_READ_KEYS=32;
@@ -30,21 +30,44 @@ export function chunkedCentralRead(read:CentralRead):CentralRead{
 export function centralTaskShape(t:any,id:string,project?:string):boolean{
  return !(!obj(t)||t.id!==id||(project!==undefined&&t.project!==project)||typeof t.title!=='string'||typeof t.criteria!=='string'||!HASH.test(t.acceptance_digest??'')||sha(t.criteria)!==t.acceptance_digest||!HASH.test(t.evidence_digest??'')||!['solver_amount','reviewer_amount','reserved','paid'].every(k=>typeof t[k]==='string'&&UNITS.test(t[k]))||typeof t.state!=='string'||typeof t.pending!=='string'||typeof t.winner!=='string');
 }
-export async function readCentralTasks(rawRead:CentralRead,limit=CENTRAL_DISCOVERY_LIMIT){
+/** Proved results that cannot change, kept per chain and epoch (19 November 2026) so a cache refresh
+ * re-proves only what can. central_task_index/<n> is written once, when the task is created
+ * (chain/federation/central_earning.go), so its ref is kept for the life of the process. Every handler
+ * that writes central_task/<id> (central_earning.go, central_evidence.go, central_task_states.go)
+ * requires a prior state of open, open_unfunded, under_review, contest_open or conditional_approved,
+ * so a record in one of CENTRAL_FINAL_STATES is final; it is still re-proved after CENTRAL_FINAL_MS,
+ * so a later chain rule that reopens a final task shows without a restart. */
+export const CENTRAL_FINAL_STATES:readonly string[]=['accepted','conditional_expired','no_winner'];
+export const CENTRAL_FINAL_MS=3600000;
+export type CentralMemo={refs:Map<string,{id:string;project:string}>;final:Map<string,{at:number;task:any}>};
+const memos=new Map<string,CentralMemo>();
+export function centralMemo(key:string):CentralMemo{
+ let m=memos.get(key);if(!m){if(memos.size>=4)memos.clear();m={refs:new Map(),final:new Map()};memos.set(key,m)}return m;
+}
+/** Read the newest `limit` central tasks (newest first). Throws on any record that does not match the
+ * chain's shape, so a caller can fail soft as a whole. The count is always proved; with `memo`, index
+ * keys already proved and fresh final records are not read again (`proved` counts the keys read). */
+export async function readCentralTasks(rawRead:CentralRead,limit=CENTRAL_DISCOVERY_LIMIT,memo?:CentralMemo,now=Date.now()){
  if(!Number.isInteger(limit)||limit<1||limit>CENTRAL_DISCOVERY_LIMIT)throw Error('bounded central task read required');
  const read=chunkedCentralRead(rawRead);
  const raw=(await read(['central_task_count'])).central_task_count,count=raw==null?'0':raw;
  if(typeof count!=='string'||!COUNT.test(count))fail('count');
  const total=BigInt(count),floor=total>BigInt(limit)?total-BigInt(limit):0n,indexKeys:string[]=[];
+ // A count below a remembered index number cannot happen within one epoch: drop the memo, never trust it.
+ if(memo)for(const k of memo.refs.keys())if(BigInt(k.slice(19))>total){memo.refs.clear();memo.final.clear();break}
  for(let n=total;n>floor;n--)indexKeys.push('central_task_index/'+String(n).padStart(20,'0'));
- if(!indexKeys.length)return{tasks:[] as any[],total:count,truncated:false};
- const index=await read(indexKeys),refs=indexKeys.map(k=>{const r=index[k];if(!obj(r)||!ID.test(r.id)||!ID.test(r.project))fail('index');return r as {id:string;project:string}});
+ if(!indexKeys.length)return{tasks:[] as any[],total:count,truncated:false,proved:1};
+ const missing=indexKeys.filter(k=>!memo?.refs.has(k)),index=missing.length?await read(missing):{};
+ const refs=indexKeys.map(k=>{const held=memo?.refs.get(k);if(held)return held;const r=index[k];if(!obj(r)||!ID.test(r.id)||!ID.test(r.project))fail('index');return{id:r.id,project:r.project} as {id:string;project:string}});
  if(new Set(refs.map(r=>r.id)).size!==refs.length)fail('duplicate index');
- const records=await read(refs.map(r=>'central_task/'+r.id));
- const tasks=refs.map(ref=>{const t=records['central_task/'+ref.id];
+ if(memo)for(const k of missing)memo.refs.set(k,refs[indexKeys.indexOf(k)]);
+ const fresh=(id:string)=>{const f=memo?.final.get(id);return f&&now-f.at<CENTRAL_FINAL_MS?f.task:undefined};
+ const need=refs.filter(r=>fresh(r.id)===undefined),records=need.length?await read(need.map(r=>'central_task/'+r.id)):{};
+ const tasks=refs.map(ref=>{const held=fresh(ref.id);if(held!==undefined)return held;const t=records['central_task/'+ref.id];
   if(!centralTaskShape(t,ref.id,ref.project))fail('task '+ref.id);
   return t;});
- return{tasks,total:count,truncated:floor>0n};
+ if(memo)for(const r of need){const t=records['central_task/'+r.id];if(CENTRAL_FINAL_STATES.includes(t.state))memo.final.set(r.id,{at:now,task:t});else memo.final.delete(r.id)}
+ return{tasks,total:count,truncated:floor>0n,proved:1+missing.length+need.length};
 }
 /** The chain accepts a new submission only in exactly these states: an open
  * task with nothing pending, or a Beauty Contest before closes_at with an entry
@@ -145,9 +168,11 @@ export function centralHistoryRow(t:any,projectTitle:string|null|undefined,claim
  * now; `history` holds every other visible task with its tab (centralTab), for the /tasks tabs. */
 /** `heightOf`, when given, is the proved height of each record key: rows read in separate proofs
  * then carry `proved_height`, and the result says the page is not one atomic snapshot. */
-export async function centralDiscovery(read:CentralRead,{pins,isProjectVisible,projectTitle,heightOf}:{pins:{chainId:string;epoch:string};isProjectVisible?:(id:string)=>boolean;projectTitle?:(id:string)=>Promise<string|null>;heightOf?:(key:string)=>string|undefined}){
+/** `memo` (centralMemo, per chain and epoch) skips proofs that cannot change; open rows are never
+ * memoized, so their `proved_height` is always from this read. */
+export async function centralDiscovery(read:CentralRead,{pins,isProjectVisible,projectTitle,heightOf,memo}:{pins:{chainId:string;epoch:string};isProjectVisible?:(id:string)=>boolean;projectTitle?:(id:string)=>Promise<string|null>;heightOf?:(key:string)=>string|undefined;memo?:CentralMemo}){
  try{
-  const {tasks,total,truncated}=await readCentralTasks(read),titles=new Map<string,string|null>(),rows=[],history:any[]=[],not_claimable:Record<string,number>={};
+  const {tasks,total,truncated}=await readCentralTasks(read,CENTRAL_DISCOVERY_LIMIT,memo),titles=new Map<string,string|null>(),rows=[],history:any[]=[],not_claimable:Record<string,number>={};
   for(const t of tasks){
    if(isProjectVisible&&!isProjectVisible(t.project))continue;
    const claim=centralTaskClaim(t,centralTaskHeld(t,pins));
@@ -169,7 +194,7 @@ export function withCentralOpenCounts(rows:any[],centralRows:any[]){
 }
 
 /** Proved central discovery results. Reading every central task and its index takes many proof
- * reads (19 s at 104 tasks on 9 November 2026), so a page answers from the last proved result: fresh
+ * reads (19 s at 104 tasks on 9 November 2026; centralMemo now skips the ones that cannot change), so a page answers from the last proved result: fresh
  * for CENTRAL_CACHE_MS, then still served (up to CENTRAL_STALE_MS old) while one background refresh
  * proves a new one. Only available results are kept; a page that uses one carries `cached_at`.
  * Submission re-checks every task on chain, so a list at most minutes old never pays wrongly. */

@@ -4,6 +4,7 @@
 // pre-extraction router, so they pin behaviour rather than describe the new
 // layout.
 import test from 'node:test';
+import { catalogueTest } from './private-catalogue.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fixture, member, audience } from './http-fixture.mjs';
@@ -279,7 +280,7 @@ test('shared body bounds, query parsing and error shaping', () => {
 
 // OPP10 was prospectively corrected before its first native opening; the public
 // composer must use that exact contract, not the older bundled draft.
-test('OPP10 public survey template matches the qualified native contract', async (t) => {
+catalogueTest('OPP10 public survey template matches the qualified native contract', async (t) => {
   const f = await fixture(t);
   const { surveyTemplates } = await import('../../../services/project-organizations/ops/survey-templates.mjs');
   const taskId = 'T-OPP-00010-1-prior-art-survey';

@@ -178,6 +178,13 @@ func (s *transitionReads) CentralTaskStatesMarker() []byte {
 	return s.Get([]byte("central_task_states_activation"))
 }
 
+func (s *transitionReads) MemberRenameMarker() []byte {
+	if reader, ok := s.Store.(interface{ MemberRenameMarker() []byte }); ok {
+		return reader.MemberRenameMarker()
+	}
+	return s.Get([]byte("member_rename_activation"))
+}
+
 func (s *transitionReads) CentralEarningMarker() []byte {
 	if reader, ok := s.Store.(interface{ CentralEarningMarker() []byte }); ok {
 		return reader.CentralEarningMarker()

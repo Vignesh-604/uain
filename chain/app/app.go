@@ -26,7 +26,7 @@ import (
 	"github.com/uain-org/uain/chain/types"
 )
 
-const Version = "0.4.2"
+const Version = "0.4.3"
 const TransactionGas = uint64(3000000)
 
 type memberAddressCodec struct{}
@@ -338,6 +338,14 @@ func (s nativeStore) CentralTaskStatesMarker() []byte {
 		return s.policyStore.Get([]byte("central_task_states_activation"))
 	}
 	return s.Get([]byte("central_task_states_activation"))
+}
+
+// Member rename must add no gas to a replayed pre-activation member_rename.
+func (s nativeStore) MemberRenameMarker() []byte {
+	if s.policyStore != nil {
+		return s.policyStore.Get([]byte("member_rename_activation"))
+	}
+	return s.Get([]byte("member_rename_activation"))
 }
 
 func (s nativeStore) ArbitrationMarker() []byte {

@@ -6,7 +6,7 @@ import{createNativePublicProofCache}from'../native/public-proof-cache.ts';
 import{readNativePublicVisibility,type NativePublicVisibility}from'../native/public-visibility.ts';
 import{memberRow,queryNativePublicRows}from'../native/public-query.ts';
 import{createNativePublicSiteSnapshots}from'../native/public-site-snapshot.ts';
-import{centralDiscovery,cachedCentralDiscovery,CENTRAL_RETRY_MS,withCentralOpenCounts,centralTaskShape,centralTaskHeld}from'../native/central-discovery.ts';
+import{centralDiscovery,cachedCentralDiscovery,centralMemo,CENTRAL_RETRY_MS,withCentralOpenCounts,centralTaskShape,centralTaskHeld}from'../native/central-discovery.ts';
 import{readWithRetry}from'../native/read-retry.ts';
 import{createNativePublicCatchUp,createNativePublicCatchUpPool,createNativePublicHeadReader,nativeProjectionBehind,NativePublicProjectionPending}from'../native/public-catch-up.ts';
 import{createOwnHeightProver,createBrowsePageCache,browseProvedBlock,browseChainTime,NativePublicReadWarming,BROWSE_VIEW_MS,BROWSE_COLD_WAIT_MS,type BrowsePage,type BrowseStamp}from'../native/public-browse.ts';
@@ -89,7 +89,8 @@ async function buildNativePublicData(url:URL,visibility:NativePublicVisibility,b
    // One proved central result serves both lists. The project list used to prove every central task
    // a second time under its own cache key, only to count them: about 45 more proof reads in every
    // view (10 November 2026). Its rows are the visible projects, so the counts are the same.
-   const centralRows=()=>cachedCentralDiscovery(JSON.stringify(['tasks',initial.chain_id,selectedEpoch,visibility.version]),()=>{const src=centralSource(config,initial.chain_id);return centralDiscovery(src.read,{heightOf:src.heightOf,pins:{chainId:initial.chain_id,epoch:selectedEpoch},isProjectVisible:id=>visibility.isProjectVisible(id),projectTitle:async id=>(await reader.discoveryProject(id))?.title??null})});
+   // The memo is per chain and epoch, not per visibility version: proofs do not depend on visibility.
+   const centralRows=()=>cachedCentralDiscovery(JSON.stringify(['tasks',initial.chain_id,selectedEpoch,visibility.version]),()=>{const src=centralSource(config,initial.chain_id);return centralDiscovery(src.read,{heightOf:src.heightOf,memo:centralMemo(JSON.stringify([initial.chain_id,selectedEpoch])),pins:{chainId:initial.chain_id,epoch:selectedEpoch},isProjectVisible:id=>visibility.isProjectVisible(id),projectTitle:async id=>(await reader.discoveryProject(id))?.title??null})});
    if(category==='tasks')central=await centralRows();
    // Each project row also counts its open, funded central tasks (survey parts and later units), so
    // project listings (and BAINK's baink_projects) show work that only BAINK can take.

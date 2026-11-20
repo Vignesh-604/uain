@@ -82,7 +82,7 @@ export const normalEmail = (email) => {
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const pct = (part, whole) => (whole > 0 ? ` <span class="pct">${Math.round((part / whole) * 1000) / 10}%</span>` : "");
 
-export function createAdmin({ dataDir, campaigns, acceptedTask, clientIp, secureCookie = true, uainOrigin = "https://uain.global", now = Date.now }) {
+export function createAdmin({ dataDir, feedback = null, campaigns, acceptedTask, members, memberAccounts, memberOrigins, clientIp, secureCookie = true, uainOrigin = "https://uain.global", now = Date.now }) {
   const sessions = new Map(); // sha256(token) -> { email, expires }
   // Failed attempts (13 November 2026, B1-6): one log per key kind, so failures
   // from many addresses or unknown emails can never push an admin email's
@@ -157,7 +157,7 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, clientIp, secure
   // baink.money/go/<code> is the same code and count, kept for links already out.
   const goLink = (origin, code) => `${uainOrigin}/go/${code}`;
   const bainkGoLink = (origin, code) => `${origin}/go/${code}`;
-  const nav = (session, active) => `<header><h1>BAINK marketing</h1><nav><a href="/admin"${active === "numbers" ? ' class="on"' : ""}>Numbers</a><a href="/admin/posts"${active === "posts" ? ' class="on"' : ""}>Posts</a><a href="/admin/replies"${active === "replies" ? ' class="on"' : ""}>Replies</a><a href="/admin/posts/new" class="new">+ New post</a></nav><form method="post" action="/admin/logout"><span>${esc(session.email)}</span><button type="submit">Log out</button></form></header>`;
+  const nav = (session, active) => `<header><h1>BAINK marketing</h1><nav><a href="/admin"${active === "numbers" ? ' class="on"' : ""}>Numbers</a><a href="/admin/posts"${active === "posts" ? ' class="on"' : ""}>Posts</a><a href="/admin/replies"${active === "replies" ? ' class="on"' : ""}>Replies</a>${feedback?.enabled ? `<a href="/admin/feedback"${active === "feedback" ? ' class="on"' : ""}>Feedback${(() => { const n = feedback.openCount(); return n ? ` <span class="count">${n}</span>` : ""; })()}</a>` : ""}<a href="/admin/posts/new" class="new">+ New post</a></nav><form method="post" action="/admin/logout"><span>${esc(session.email)}</span><button type="submit">Log out</button></form></header>`;
 
   // What Numbers shows, for the page and for a marketing:read token: Draft posts
   // and replies that are New or Skipped are left out.
@@ -176,27 +176,114 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, clientIp, secure
   }
   const totalOf = (rows) => rows.reduce((t, r) => ({ reads: t.reads + r.reads, bots: t.bots + (r.bots ?? 0), accounts: t.accounts + r.accounts, enrolled: t.enrolled + r.enrolled, acceptedTask: t.acceptedTask + r.acceptedTask, spent: t.spent + r.spent }), { reads: 0, bots: 0, accounts: 0, enrolled: 0, acceptedTask: 0, spent: 0 });
 
-  async function dashboard(session) {
+  // Numbers can be sorted by any column with ?sort=<column>&dir=asc|desc (plain links, no script).
+  // A number column starts largest first, the name column A to Z; ties keep the default order.
+  const validDate = value => typeof value === "string" && /^\d{4}-\d\d-\d\dT/.test(value) && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
+  const dateCell = value => value ? `<time datetime="${esc(value)}">${esc(value.replace("T", " ").slice(0, 16))} UTC</time>` : "—";
+  const SORT_COLUMNS = { date: "Updated", name: "Name", reads: "Opened", accounts: "Joined", enrolled: "Enrolled", acceptedTask: "First task accepted", spent: "First spend" };
+  function sortOf(query) {
+    const sort = Object.hasOwn(SORT_COLUMNS, query?.get("sort")) ? query.get("sort") : null;
+    if (!sort) return { sort: null, dir: null };
+    const dir = ["asc", "desc"].includes(query.get("dir")) ? query.get("dir") : sort === "name" ? "asc" : "desc";
+    return { sort, dir };
+  }
+  function sorted(rows, { sort, dir }, nameOf) {
+    if (!sort) return rows;
+    const sign = dir === "asc" ? 1 : -1;
+    const key = (r) => sort === "date" ? (r.date ? Date.parse(r.date) : null) : (sort === "name" ? String(nameOf(r) ?? "").toLowerCase() : Number(r[sort]) || 0);
+    return rows.map((r, i) => ({ r, i, k: key(r) }))
+      .sort((a, b) => a.k === null ? (b.k === null ? a.i - b.i : 1) : b.k === null ? -1 : (a.k < b.k ? -sign : a.k > b.k ? sign : a.i - b.i))
+      .map(({ r }) => r);
+  }
+
+  async function memberTable(query) {
+    if (!members) return "";
+    const list = await members();
+    let classes = {};
+    try { const parsed = JSON.parse(await readFile(join(dataDir, "admin-member-classes.json"), "utf8")); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) classes = parsed; } catch {}
+    const origins = await memberOrigins?.() ?? {};
+    const accounts = new Map((memberAccounts?.() ?? []).map((a) => [a.address, a]));
+    const rows = new Map((list ?? []).filter((m) => !m.archival).map((m) => [m.address, {
+      address: m.address, name: m.name || m.address, joined: validDate(m.joined_at), karma: Number.isFinite(m.karma) ? m.karma : null,
+    }]));
+    for (const a of accounts.values()) if (!rows.has(a.address)) rows.set(a.address, { address: a.address, name: a.name || a.address, joined: null, karma: null });
+    for (const r of rows.values()) {
+      r.joined = validDate(accounts.get(r.address)?.createdAt) ?? r.joined;
+      r.source = accounts.get(r.address)?.via || "Unknown / unattributed";
+      r.group = ["External", "Team-test"].includes(classes[r.address]) ? classes[r.address] : "Unclassified";
+      const origin = origins[r.address];
+      r.ip = typeof origin?.ip === "string" ? origin.ip : null;
+      r.location = typeof origin?.location === "string" && origin.location ? origin.location : "Unknown";
+    }
+    const columns = { name: "Member", joined: "Joined", source: "Source", group: "Classification", location: "Signup location (approx.)", karma: "Karma" };
+    const column = Object.hasOwn(columns, query?.get("memberSort")) ? query.get("memberSort") : "karma";
+    const dir = query?.get("memberDir") === "asc" ? "asc" : "desc";
+    const ordered = [...rows.values()].sort((a, b) => {
+      if (a[column] === null) return b[column] === null ? 0 : 1;
+      if (b[column] === null) return -1;
+      const x = typeof a[column] === "string" ? a[column].localeCompare(b[column]) : a[column] - b[column];
+      return dir === "asc" ? x : -x;
+    });
+    const headers = Object.entries(columns).map(([key, label]) => {
+      const q = new URLSearchParams(query); q.set("tab", "members"); q.set("memberSort", key); q.set("memberDir", column === key && dir === "desc" ? "asc" : "desc");
+      return `<th><a href="/admin?${esc(q.toString())}#members">${label}</a>${column === key ? (dir === "asc" ? " ▲" : " ▼") : ""}</th>`;
+    }).join("");
+    const cell = (r) => `<tr><td>${esc(r.name)}<div class="code">${esc(r.address)}</div></td><td>${dateCell(r.joined)}</td><td>${esc(r.source)}</td><td>${esc(r.group)}</td><td>${esc(r.location)}${r.ip ? `<details><summary>Reveal signup IP</summary><code>${esc(r.ip)}</code></details>` : ""}</td><td>${r.karma === null ? "Unknown" : r.karma}</td></tr>`;
+    const grouped = query?.get("groupBy") === "ip";
+    let body = ordered.map(cell).join("");
+    if (grouped) {
+      const groups = new Map();
+      for (const r of ordered) {
+        // Unknown IPs never imply one shared operator: each is its own group.
+        const key = r.ip || `unknown:${r.address}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(r);
+      }
+      body = [...groups.values()].map(rs => {
+        const known = rs.filter(r => r.karma !== null);
+        const karma = known.reduce((n, r) => n + r.karma, 0);
+        return `<tr class="ip-group"><th colspan="6">${esc(rs[0].location)} · ${rs.length} account${rs.length === 1 ? "" : "s"} · ${known.length ? `${karma} known Karma` : "Unknown Karma"}${known.length < rs.length ? ` (${rs.length - known.length} unknown)` : ""}${rs[0].ip ? " · shared signup IP" : " · signup IP unknown"}</th></tr>` + rs.map(cell).join("");
+      }).join("");
+    }
+    const toggle = new URLSearchParams(query); toggle.set("tab", "members");
+    if (grouped) toggle.delete("groupBy"); else toggle.set("groupBy", "ip");
+    return `<section id="members"><h2>Members</h2><p class="note">${list ? ordered.length : "Known local"} accounts, not people. Includes members without campaign attribution. Source is the stored campaign code, never inferred. Classification uses an explicit address list; other accounts are Unclassified. Karma is shown; earnings are not loaded here.${list ? "" : " Member list unreadable; local accounts shown with unknown Karma."}</p><p class="note">Joined uses local account creation time, otherwise a valid native join time; unavailable dates are blank and sorted last. Location is approximate at signup, not current location. Same IP does not prove the same person; shared networks and VPNs exist. Missing, ambiguous or relayed signup evidence stays Unknown. Locations are cached privately, not looked up on page load.</p><p><a href="/admin?${esc(toggle.toString())}#members">${grouped ? "Ungroup accounts" : "Group by signup IP"}</a></p><table><thead><tr>${headers}</tr></thead><tbody>${body || '<tr><td colspan="6">No accounts available.</td></tr>'}</tbody></table></section>`;
+  }
+
+  async function dashboard(session, query) {
+    const order = sortOf(query);
+    const tab = ["members", "posts", "replies"].includes(query?.get("tab")) ? query.get("tab") : query?.has("memberSort") ? "members" : "posts";
+    const tabs = ["members", "posts", "replies"].map(value => {
+      const q = new URLSearchParams(query); q.set("tab", value);
+      return `<a ${tab === value ? 'aria-current="page"' : ""} href="/admin?${esc(q.toString())}">${value[0].toUpperCase() + value.slice(1)}</a>`;
+    }).join("");
+    const head = (column, label) => {
+      const on = order.sort === column;
+      const first = column === "name" ? "asc" : "desc";
+      const dir = on ? (order.dir === "asc" ? "desc" : "asc") : first;
+      const mark = on ? ` <span class="sort">${order.dir === "asc" ? "▲" : "▼"}</span>` : "";
+      const q = new URLSearchParams(query); q.set("sort", column); q.set("dir", dir);
+      return `<th${on ? ' class="on"' : ""}><a href="/admin?${esc(q.toString())}">${label}</a>${mark}</th>`;
+    };
     const { report, postRows: postData, replyRows: replyData } = await numbers();
     const line = (r, name, sub) => {
       const out = r.url ? ` <a href="${esc(r.url)}" rel="noopener noreferrer" target="_blank" title="Open it">↗</a>` : "";
-      return `<tr><td>${name}${out}<div class="code">${sub}</div></td><td>${r.reads}</td><td>${r.accounts}${pct(r.accounts, r.reads)}</td><td>${r.enrolled}${pct(r.enrolled, r.accounts)}</td><td>${r.acceptedTask}${pct(r.acceptedTask, r.enrolled)}${r.acceptedTaskUnknown ? ` <span class="pct">(+${r.acceptedTaskUnknown} unreadable)</span>` : ""}</td><td>${r.spent}${pct(r.spent, r.acceptedTask)}</td></tr>`;
+      return `<tr><td>${name}${out}<div class="code">${sub}</div></td><td>${dateCell(r.date)}</td><td>${r.reads}</td><td>${r.accounts}${pct(r.accounts, r.reads)}</td><td>${r.enrolled}${pct(r.enrolled, r.accounts)}</td><td>${r.acceptedTask}${pct(r.acceptedTask, r.enrolled)}${r.acceptedTaskUnknown ? ` <span class="pct">(+${r.acceptedTaskUnknown} unreadable)</span>` : ""}</td><td>${r.spent}${pct(r.spent, r.acceptedTask)}</td></tr>`;
     };
     const table = (title, rows, empty) => {
       const total = totalOf(rows);
-      const body = rows.map((r) => r._html).join("") || `<tr><td colspan="6" class="note">${empty}</td></tr>`;
-      return `<h2>${title}</h2><table><thead><tr><th>${title === "Replies" ? "Reply" : "Post"}</th><th>Opened</th><th>Joined</th><th>Enrolled</th><th>First task accepted</th><th>First spend</th></tr></thead>
-<tbody>${body}</tbody><tfoot><tr><td>Total</td><td>${total.reads}</td><td>${total.accounts}</td><td>${total.enrolled}</td><td>${total.acceptedTask}</td><td>${total.spent}</td></tr></tfoot></table>`;
+      const body = rows.map((r) => r._html).join("") || `<tr><td colspan="7" class="note">${empty}</td></tr>`;
+      return `<h2>${title}</h2><table><thead><tr>${head("name", title === "Replies" ? "Reply" : "Post")}${head("date", "Updated")}${head("reads", "Opened")}${head("accounts", "Joined")}${head("enrolled", "Enrolled")}${head("acceptedTask", "First task accepted")}${head("spent", "First spend")}</tr></thead>
+<tbody>${body}</tbody><tfoot><tr><td>Total</td><td></td><td>${total.reads}</td><td>${total.accounts}</td><td>${total.enrolled}</td><td>${total.acceptedTask}</td><td>${total.spent}</td></tr></tfoot></table>`;
     };
-    const replyRows = replyData.map(({ reply, ...r }) => ({ ...r, _html: line(r, `<a href="/admin/replies#${esc(r.code)}">${esc(reply.threadTitle)}</a>`, `${esc(r.code)} · ${esc(reply.where || PLATFORM_NAMES[reply.platform])}`) }));
-    const postRows = postData.map(({ post: p, ...r }) => {
+    const replyRows = sorted(replyData.map(r => ({ ...r, date: validDate(r.reply.updatedAt) ?? validDate(r.reply.createdAt) })), order, (r) => r.reply.threadTitle).map(({ reply, ...r }) => ({ ...r, _html: line(r, `<a href="/admin/replies#${esc(r.code)}">${esc(reply.threadTitle)}</a>`, `${esc(r.code)} · ${esc(reply.where || PLATFORM_NAMES[reply.platform])}`) }));
+    const postRows = sorted(postData.map(r => ({ ...r, date: validDate(r.post?.updatedAt) ?? validDate(r.post?.createdAt) })), order, (r) => r.label).map(({ post: p, ...r }) => {
       const name = p ? `<a href="/admin/posts/${esc(r.code)}">${esc(r.label)}</a>` : esc(r.label);
       return { ...r, _html: line(r, name, `${esc(r.code)}${p ? ` · ${esc(PLATFORM_NAMES[p.platform] ?? p.platform)} · ${esc(STATUS_NAMES[p.status] ?? p.status)}` : ""}`) };
     });
     return `${nav(session, "numbers")}
-<main><p class="note">Per link (<code>uain.global/go/&lt;code&gt;</code>; the older <code>baink.money/go/&lt;code&gt;</code> counts under the same code). Draft posts and replies not yet posted are left out. Opened counts people and agents; link-preview and crawler bots are left out (${postData.concat(replyData).reduce((n, r) => n + (r.bots ?? 0), 0)} on these rows). Each percentage is of the column before it. Read ${esc(report.generatedAt)}; page reads lag by up to a minute.</p>
-${table("Posts", postRows, "No posts yet.")}
-${table("Replies", replyRows, "No replies posted yet.")}
+<main><nav aria-label="Numbers tabs">${tabs}</nav><p class="note">Per link (<code>uain.global/go/&lt;code&gt;</code>; the older <code>baink.money/go/&lt;code&gt;</code> counts under the same code). Draft posts and replies not yet posted are left out. Opened counts people and agents; link-preview and crawler bots are left out (${postData.concat(replyData).reduce((n, r) => n + (r.bots ?? 0), 0)} on these rows). Each percentage is of the column before it. Read ${esc(report.generatedAt)}; page reads lag by up to a minute.</p>
+${tab === "members" ? await memberTable(query) : tab === "replies" ? table("Replies", replyRows, "No replies posted yet.") : table("Posts", postRows, "No posts yet.")}
 <details><summary>What each column counts</summary><p>${esc(report.note)}</p></details></main>`;
   }
 
@@ -295,6 +382,38 @@ ${isNew ? "" : `<p class="note">Code <code>${esc(p.code)}</code> never changes. 
 <script>${COPY_JS}</script></main>`;
   }
 
+  // Feedback inbox (feedback.mjs): reports from members and newcomers. Private; nothing here is public.
+  const FB_STATUS = { new: "New", investigating: "Investigating", resolved: "Resolved", closed: "Closed" };
+  const FB_CATEGORY = { bug: "Bug", "task-review": "Task or review", suggestion: "Suggestion" };
+  const DELIVERY = { delivered: "Sent to Slack", pending: "Slack: retrying", failed: "Slack: failed", skipped: "Not notified", grouped: "Grouped with a pending notice", none: "—" };
+  function feedbackPage(session, params, msg = "") {
+    const filter = FB_STATUS[params.get("status")] ? params.get("status") : null;
+    const all = [];
+    for (let offset=0; offset<feedback.count(); offset+=500) all.push(...feedback.list(500, offset));
+    const rows = all.filter((r) => !filter || r.status === filter);
+    const counts = Object.fromEntries(Object.keys(FB_STATUS).map((k) => [k, all.filter((r) => r.status === k).length]));
+    const tabs = `<nav class="tabs" aria-label="Feedback status"><a href="/admin/feedback"${filter ? "" : ' class="on"'}>All <span class="count">${all.length}</span></a>${Object.entries(FB_STATUS).map(([k, v]) => `<a href="/admin/feedback?status=${k}"${filter === k ? ' class="on"' : ""}>${v} <span class="count">${counts[k]}</span></a>`).join("")}</nav>`;
+    const row = (r) => `<tr><td class="ptitle"><a href="/admin/feedback/${esc(r.id)}">${esc(r.summary)}</a><div class="sub">${esc(FB_CATEGORY[r.category] ?? r.category)}${r.stage ? ` · ${esc(r.stage)}` : ""}${r.errorCode ? ` · <code>${esc(r.errorCode)}</code>` : ""}${r.taskId ? ` · ${esc(r.taskId)}` : ""}</div></td><td>${esc(FB_STATUS[r.status])}</td><td class="code">${r.anonymous ? "anonymous" : esc(r.member)}</td><td class="date">${esc(r.createdAt.slice(0, 16).replace("T", " "))}</td><td class="date">${esc(DELIVERY[r.delivery] ?? r.delivery)}</td></tr>`;
+    const table = rows.length
+      ? `<table class="posts"><thead><tr><th>Report</th><th>Status</th><th>From</th><th>Received (UTC)</th><th>Notice</th></tr></thead><tbody>${rows.map(row).join("")}</tbody></table>`
+      : `<p class="note">No reports${filter ? ` marked ${esc(FB_STATUS[filter])}` : ""}.</p>`;
+    return `${nav(session, "feedback")}<main>${msg ? `<p class="ok">${esc(msg)}</p>` : ""}<h2>Feedback</h2><p class="note">Reports sent with the kit (<code>uain-agent feedback</code>), uain_feedback on uain.global/mcp or baink_feedback. Private to this admin; a reporter sees only its status and your reply. A task-review report never changes a verdict. Requester addresses are not stored.</p>${tabs}${table}</main>`;
+  }
+  function feedbackDetail(session, r, msg = "") {
+    const field = (label, value) => value ? `<tr><th>${label}</th><td>${value}</td></tr>` : "";
+    const delivery = `${r.similarReports > 1 ? `${r.similarReports} similar reports in 24h · ` : ""}${esc(DELIVERY[r.delivery] ?? r.delivery)}${r.deliveryAttempts ? ` (${r.deliveryAttempts} attempt${r.deliveryAttempts === 1 ? "" : "s"})` : ""}${r.deliveryError ? `, last error <code>${esc(r.deliveryError)}</code>` : ""}${r.deliveryNextAt ? `, next try ${esc(r.deliveryNextAt.slice(0, 16).replace("T", " "))} UTC` : ""}`;
+    return `${nav(session, "feedback")}<main class="edit"><p class="back"><a href="/admin/feedback">← All feedback</a></p>${msg ? `<p class="${msg === "Saved." ? "ok" : "msg"}">${esc(msg)}</p>` : ""}
+<h2>${esc(r.summary)}</h2>
+<table>${field("Report", `<code>${esc(r.id)}</code>`)}${field("Category", esc(FB_CATEGORY[r.category] ?? r.category))}${field("Status", esc(FB_STATUS[r.status]))}${field("From", r.anonymous ? "anonymous (not signed)" : `<code>${esc(r.member)}</code> (signed member)`)}${field("Received", esc(r.createdAt) + " UTC")}${field("Stage", esc(r.stage))}${field("Error code", r.errorCode ? `<code>${esc(r.errorCode)}</code>` : "")}${field("Task", esc(r.taskId))}${field("Submission", esc(r.submissionId))}${field("Client", esc([r.client, r.clientVersion].filter(Boolean).join(" ")))}${field("Slack notice", delivery)}</table>
+${r.details ? `<h2>Details</h2><div class="draft"><pre>${esc(r.details)}</pre></div>` : ""}
+<form method="post" action="/admin/feedback/${esc(r.id)}">
+<label>Status <select name="status">${Object.entries(FB_STATUS).map(([k, v]) => `<option value="${k}"${r.status === k ? " selected" : ""}>${v}</option>`).join("")}</select></label>
+<label>Reply the reporter sees <span class="hint">(optional, at most 600 characters)</span><textarea name="reply" rows="3" maxlength="600">${esc(r.reply ?? "")}</textarea></label>
+<label>Private notes <span class="hint">(only in this admin)</span><textarea name="notes" rows="4" maxlength="4000">${esc(r.notes ?? "")}</textarea></label>
+<button type="submit">Save</button></form>
+${r.updatedBy ? `<p class="note">Last changed by ${esc(r.updatedBy)} on ${esc(r.updatedAt.slice(0, 16).replace("T", " "))} UTC.</p>` : ""}</main>`;
+  }
+
   async function form(req) {
     const chunks = []; let length = 0;
     for await (const chunk of req) { length += chunk.length; if (length > 65536) return null; chunks.push(chunk); }
@@ -390,6 +509,32 @@ ${isNew ? "" : `<p class="note">Code <code>${esc(p.code)}</code> never changes. 
       if (req.method !== "POST") { res.writeHead(405, { Allow: path === "/admin/api/replies" ? "GET, POST" : "POST" }); res.end(); return true; }
       return draftApi(req, res, origin, path === "/admin/api/replies" ? "replies" : "drafts");
     }
+    const feedbackPath = /^\/admin\/feedback\/(FB-[a-f0-9-]{36})$/.exec(path);
+    if (feedback?.enabled && (path === "/admin/feedback" || feedbackPath)) {
+      if (req.method === "GET") {
+        const session = await current(req);
+        if (!session) return page(res, 200, "Log in", loginForm()), true;
+        if (!feedbackPath) return page(res, 200, "Feedback", feedbackPage(session, url.searchParams)), true;
+        const r = feedback.get(feedbackPath[1]);
+        if (!r) return page(res, 404, "Not found", `${nav(session, "feedback")}<main><p class="msg">No such report.</p></main>`), true;
+        return page(res, 200, "Feedback", feedbackDetail(session, r, url.searchParams.get("saved") === "1" ? "Saved." : "")), true;
+      }
+      if (req.method !== "POST" || !feedbackPath) return page(res, 405, "Not allowed", `<main class="login"><p class="msg">Method not allowed.</p></main>`, { Allow: feedbackPath ? "GET, POST" : "GET" }), true;
+      if (!sameOrigin(req, origin)) return page(res, 403, "Refused", `<main class="login"><p class="msg">Refused: cross-site request.</p></main>`), true;
+      const session = await current(req);
+      if (!session) return page(res, 303, "Log in", "", { Location: "/admin" }), true;
+      const fields = await form(req);
+      if (!fields) return page(res, 413, "Too large", `${nav(session, "feedback")}<main><p class="msg">Too long.</p></main>`), true;
+      try {
+        feedback.update(feedbackPath[1], { status: fields.get("status"), reply: fields.get("reply") ?? "", notes: fields.get("notes") ?? "" }, { by: session.email });
+      } catch (error) {
+        if (!["invalid_feedback", "feedback_missing"].includes(error.code)) throw error;
+        const r = feedback.get(feedbackPath[1]);
+        if (!r) return page(res, 404, "Not found", `${nav(session, "feedback")}<main><p class="msg">No such report.</p></main>`), true;
+        return page(res, 400, "Feedback", feedbackDetail(session, r, error.message)), true;
+      }
+      return page(res, 303, "Saved", "", { Location: `/admin/feedback/${feedbackPath[1]}?saved=1` }), true;
+    }
     const replyPath = /^\/admin\/replies\/([a-z0-9][a-z0-9-]{0,39})$/.exec(path);
     if (path === "/admin/replies" || replyPath) {
       if (req.method === "GET" && !replyPath) {
@@ -439,7 +584,7 @@ ${isNew ? "" : `<p class="note">Code <code>${esc(p.code)}</code> never changes. 
     if (req.method === "GET" && (path === "/admin" || path === "/admin/posts" || path === "/admin/posts/new" || postPath)) {
       const session = await current(req);
       if (!session) return page(res, 200, "Log in", loginForm()), true;
-      if (path === "/admin") return page(res, 200, "Numbers", await dashboard(session)), true;
+      if (path === "/admin") return page(res, 200, "Numbers", await dashboard(session, url.searchParams)), true;
       if (path === "/admin/posts") return page(res, 200, "Posts", postsPage(session, url.searchParams)), true;
       if (path === "/admin/posts/new") return page(res, 200, "New post", postForm(session, origin, null)), true;
       const post = campaigns.post(postPath[1]);
@@ -510,7 +655,9 @@ form label{display:block;margin:12px 0}input{display:block;width:100%;box-sizing
 button{padding:8px 16px;border:0;border-radius:6px;background:#0a9be0;color:#fff;cursor:pointer}
 .msg{background:#fdecec;color:#8a1c1c;padding:8px 12px;border-radius:6px}
 table{width:100%;border-collapse:collapse;background:#fff}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #e3e8ef}
-th{background:#eef2f7;font-weight:600}tfoot td{font-weight:600}.code{font:12px monospace;color:#6b7a90}.pct{color:#6b7a90;font-size:13px}.note{color:#4a5a70}
+th{background:#eef2f7;font-weight:600}th a{color:inherit;text-decoration:none}th a:hover{text-decoration:underline}th.on{background:#dde6f1}.sort{font-size:11px;color:#4a5a70}tfoot td{font-weight:600}.code{font:12px monospace;color:#6b7a90}.pct{color:#6b7a90;font-size:13px}.note{color:#4a5a70}
+nav[aria-label="Numbers tabs"]{display:flex;gap:8px;margin:0 0 20px;border-bottom:1px solid #c5ced9;padding-bottom:10px}nav[aria-label="Numbers tabs"] a{padding:8px 18px;border-radius:6px;text-decoration:none;color:#17436b;background:#e8eef5}nav[aria-label="Numbers tabs"] a[aria-current="page"]{background:#123a63;color:white;font-weight:600}
+header nav .count{display:inline-block;min-width:18px;padding:0 6px;margin-left:4px;border-radius:9px;background:#e8590c;color:#fff;font-size:12px;text-align:center}
 header nav{display:flex;gap:6px}header nav a{color:#cfe3f5;text-decoration:none;padding:6px 12px;border-radius:6px}header nav a.on{background:#123a63;color:#fff}header nav a.new{background:#0a9be0;color:#fff}
 h2{font-size:17px;margin:28px 0 8px}.filters{display:flex;gap:6px;flex-wrap:wrap}.filters a{padding:4px 10px;border-radius:14px;background:#e6ecf3;color:#14213d;text-decoration:none;font-size:13px}.filters a.on{background:#0b2a4a;color:#fff}
 .edit{max-width:820px}.edit textarea,.edit select{display:block;width:100%;box-sizing:border-box;padding:8px;margin-top:4px;border:1px solid #c5ced9;border-radius:6px;font:inherit}
