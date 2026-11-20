@@ -176,7 +176,33 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, clientIp, secure
   }
   const totalOf = (rows) => rows.reduce((t, r) => ({ reads: t.reads + r.reads, bots: t.bots + (r.bots ?? 0), accounts: t.accounts + r.accounts, enrolled: t.enrolled + r.enrolled, acceptedTask: t.acceptedTask + r.acceptedTask, spent: t.spent + r.spent }), { reads: 0, bots: 0, accounts: 0, enrolled: 0, acceptedTask: 0, spent: 0 });
 
-  async function dashboard(session) {
+  // Numbers can be sorted by any column with ?sort=<column>&dir=asc|desc (plain links, no script).
+  // A number column starts largest first, the name column A to Z; ties keep the default order.
+  const SORT_COLUMNS = { name: "Name", reads: "Opened", accounts: "Joined", enrolled: "Enrolled", acceptedTask: "First task accepted", spent: "First spend" };
+  function sortOf(query) {
+    const sort = Object.hasOwn(SORT_COLUMNS, query?.get("sort")) ? query.get("sort") : null;
+    if (!sort) return { sort: null, dir: null };
+    const dir = ["asc", "desc"].includes(query.get("dir")) ? query.get("dir") : sort === "name" ? "asc" : "desc";
+    return { sort, dir };
+  }
+  function sorted(rows, { sort, dir }, nameOf) {
+    if (!sort) return rows;
+    const sign = dir === "asc" ? 1 : -1;
+    const key = (r) => (sort === "name" ? String(nameOf(r) ?? "").toLowerCase() : Number(r[sort]) || 0);
+    return rows.map((r, i) => ({ r, i, k: key(r) }))
+      .sort((a, b) => (a.k < b.k ? -sign : a.k > b.k ? sign : a.i - b.i))
+      .map(({ r }) => r);
+  }
+
+  async function dashboard(session, query) {
+    const order = sortOf(query);
+    const head = (column, label) => {
+      const on = order.sort === column;
+      const first = column === "name" ? "asc" : "desc";
+      const dir = on ? (order.dir === "asc" ? "desc" : "asc") : first;
+      const mark = on ? ` <span class="sort">${order.dir === "asc" ? "▲" : "▼"}</span>` : "";
+      return `<th${on ? ' class="on"' : ""}><a href="/admin?sort=${column}&amp;dir=${dir}">${label}</a>${mark}</th>`;
+    };
     const { report, postRows: postData, replyRows: replyData } = await numbers();
     const line = (r, name, sub) => {
       const out = r.url ? ` <a href="${esc(r.url)}" rel="noopener noreferrer" target="_blank" title="Open it">↗</a>` : "";
@@ -185,11 +211,11 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, clientIp, secure
     const table = (title, rows, empty) => {
       const total = totalOf(rows);
       const body = rows.map((r) => r._html).join("") || `<tr><td colspan="6" class="note">${empty}</td></tr>`;
-      return `<h2>${title}</h2><table><thead><tr><th>${title === "Replies" ? "Reply" : "Post"}</th><th>Opened</th><th>Joined</th><th>Enrolled</th><th>First task accepted</th><th>First spend</th></tr></thead>
+      return `<h2>${title}</h2><table><thead><tr>${head("name", title === "Replies" ? "Reply" : "Post")}${head("reads", "Opened")}${head("accounts", "Joined")}${head("enrolled", "Enrolled")}${head("acceptedTask", "First task accepted")}${head("spent", "First spend")}</tr></thead>
 <tbody>${body}</tbody><tfoot><tr><td>Total</td><td>${total.reads}</td><td>${total.accounts}</td><td>${total.enrolled}</td><td>${total.acceptedTask}</td><td>${total.spent}</td></tr></tfoot></table>`;
     };
-    const replyRows = replyData.map(({ reply, ...r }) => ({ ...r, _html: line(r, `<a href="/admin/replies#${esc(r.code)}">${esc(reply.threadTitle)}</a>`, `${esc(r.code)} · ${esc(reply.where || PLATFORM_NAMES[reply.platform])}`) }));
-    const postRows = postData.map(({ post: p, ...r }) => {
+    const replyRows = sorted(replyData, order, (r) => r.reply.threadTitle).map(({ reply, ...r }) => ({ ...r, _html: line(r, `<a href="/admin/replies#${esc(r.code)}">${esc(reply.threadTitle)}</a>`, `${esc(r.code)} · ${esc(reply.where || PLATFORM_NAMES[reply.platform])}`) }));
+    const postRows = sorted(postData, order, (r) => r.label).map(({ post: p, ...r }) => {
       const name = p ? `<a href="/admin/posts/${esc(r.code)}">${esc(r.label)}</a>` : esc(r.label);
       return { ...r, _html: line(r, name, `${esc(r.code)}${p ? ` · ${esc(PLATFORM_NAMES[p.platform] ?? p.platform)} · ${esc(STATUS_NAMES[p.status] ?? p.status)}` : ""}`) };
     });
@@ -439,7 +465,7 @@ ${isNew ? "" : `<p class="note">Code <code>${esc(p.code)}</code> never changes. 
     if (req.method === "GET" && (path === "/admin" || path === "/admin/posts" || path === "/admin/posts/new" || postPath)) {
       const session = await current(req);
       if (!session) return page(res, 200, "Log in", loginForm()), true;
-      if (path === "/admin") return page(res, 200, "Numbers", await dashboard(session)), true;
+      if (path === "/admin") return page(res, 200, "Numbers", await dashboard(session, url.searchParams)), true;
       if (path === "/admin/posts") return page(res, 200, "Posts", postsPage(session, url.searchParams)), true;
       if (path === "/admin/posts/new") return page(res, 200, "New post", postForm(session, origin, null)), true;
       const post = campaigns.post(postPath[1]);
@@ -510,7 +536,7 @@ form label{display:block;margin:12px 0}input{display:block;width:100%;box-sizing
 button{padding:8px 16px;border:0;border-radius:6px;background:#0a9be0;color:#fff;cursor:pointer}
 .msg{background:#fdecec;color:#8a1c1c;padding:8px 12px;border-radius:6px}
 table{width:100%;border-collapse:collapse;background:#fff}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #e3e8ef}
-th{background:#eef2f7;font-weight:600}tfoot td{font-weight:600}.code{font:12px monospace;color:#6b7a90}.pct{color:#6b7a90;font-size:13px}.note{color:#4a5a70}
+th{background:#eef2f7;font-weight:600}th a{color:inherit;text-decoration:none}th a:hover{text-decoration:underline}th.on{background:#dde6f1}.sort{font-size:11px;color:#4a5a70}tfoot td{font-weight:600}.code{font:12px monospace;color:#6b7a90}.pct{color:#6b7a90;font-size:13px}.note{color:#4a5a70}
 header nav{display:flex;gap:6px}header nav a{color:#cfe3f5;text-decoration:none;padding:6px 12px;border-radius:6px}header nav a.on{background:#123a63;color:#fff}header nav a.new{background:#0a9be0;color:#fff}
 h2{font-size:17px;margin:28px 0 8px}.filters{display:flex;gap:6px;flex-wrap:wrap}.filters a{padding:4px 10px;border-radius:14px;background:#e6ecf3;color:#14213d;text-decoration:none;font-size:13px}.filters a.on{background:#0b2a4a;color:#fff}
 .edit{max-width:820px}.edit textarea,.edit select{display:block;width:100%;box-sizing:border-box;padding:8px;margin-top:4px;border:1px solid #c5ced9;border-radius:6px;font:inherit}
