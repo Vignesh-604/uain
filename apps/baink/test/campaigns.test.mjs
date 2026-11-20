@@ -386,3 +386,65 @@ test('ops/campaign-reads-correct: bot views in the access log before the cut-off
   assert.throws(() => correct(short, plan, 'now'), /only 1 reads are stored/);
   assert.deepEqual(short, { ...state(), campaignReads: { ...state().campaignReads, 'x-folding': { reads: 1, bots: 1, firstAt: 'a', lastAt: 'b' } } });
 });
+
+// ---- First task accepted: Karma from uain.global's proved member list (20 November 2026)
+import { karmaReader } from '../server/campaigns.mjs';
+const A = 'uain1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', B = 'uain1bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', C = 'uain1ccccccccccccccccccccccccccccccccccccccc';
+const proved = (asOf = '2026-11-20T04:00:00.000Z') => ({ as_of: asOf, age_seconds: 1, consistent_snapshot: true, refreshing: false, strict_read: '/api/native/public/members' });
+const listPage = (members, { page = 1, pages = 1, count = members.length, asOf, authority = 'native' } = {}) => ({ count, members, authority, page, page_size: 200, pages, proved: proved(asOf) });
+const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+const listFetch = (answer) => { const urls = []; const f = async (url) => { urls.push(String(url)); return answer(new URL(String(url)), urls.length); }; f.urls = urls; return f; };
+
+test('first task accepted: one member-list read answers every account, never a lookup per member', async () => {
+  const fetchImpl = listFetch((url) => url.pathname === '/api/members'
+    ? json(200, listPage([{ address: A, karma: 140 }, { address: B, karma: 0 }]))
+    // The old reader asked /api/members/<address>; on uain.global that lookup re-proves after every
+    // chain change and ran past the 5 s limit about one time in six. Here it is simply too slow.
+    : new Promise((_, reject) => setTimeout(() => reject(new DOMException('timed out', 'TimeoutError')), 50)));
+  const read = karmaReader({ origin: 'https://uain.test', fetchImpl });
+  assert.deepEqual(await Promise.all([A, B, C].map(read)), [true, false, false], 'Karma above 0, Karma 0, not a member yet');
+  assert.deepEqual(fetchImpl.urls, ['https://uain.test/api/members?page_size=200&page=1'], 'three accounts, one list read');
+});
+
+test('first task accepted: an unreadable or untrusted list is unreadable, never 0', async () => {
+  const cases = {
+    'warming (503)': () => json(503, { error: 'native_public_read_unavailable', authority: 'native', retry_after_seconds: 5 }),
+    'not native': () => json(200, listPage([{ address: A, karma: 5 }], { authority: 'legacy' })),
+    'no proof block': () => json(200, { ...listPage([{ address: A, karma: 5 }]), proved: undefined }),
+    'short list': () => json(200, listPage([{ address: A, karma: 5 }], { count: 2 })),
+    'network error': () => { throw new TypeError('fetch failed'); },
+  };
+  for (const [name, answer] of Object.entries(cases)) {
+    const read = karmaReader({ origin: 'https://uain.test', fetchImpl: listFetch(answer) });
+    assert.deepEqual(await Promise.all([A, C].map(read)), [null, null], name);
+  }
+  const bad = karmaReader({ origin: 'https://uain.test', fetchImpl: listFetch(() => json(200, listPage([{ address: A, karma: 'x' }]))) });
+  assert.equal(await bad(A), null, 'a row without numeric Karma is unreadable');
+});
+
+test('first task accepted: every page is read and must come from one proved snapshot', async () => {
+  const two = (asOf2) => listFetch((url) => url.searchParams.get('page') === '1'
+    ? json(200, listPage([{ address: A, karma: 0 }], { pages: 2, count: 2 }))
+    : json(200, listPage([{ address: B, karma: 3 }], { page: 2, pages: 2, count: 2, asOf: asOf2 })));
+  const same = two(undefined);
+  assert.deepEqual(await Promise.all([A, B, C].map(karmaReader({ origin: 'https://uain.test', fetchImpl: same }))), [false, true, false]);
+  assert.equal(same.urls.length, 2);
+  const mixed = karmaReader({ origin: 'https://uain.test', fetchImpl: two('2026-11-20T04:01:00.000Z') });
+  assert.deepEqual(await Promise.all([A, B].map(mixed)), [null, null], 'pages from two snapshots are not one list');
+});
+
+test('first task accepted: a good list is reused for a minute, a failure is not kept, accepted stays accepted', async () => {
+  let t = 0, karma = 0, down = false;
+  const fetchImpl = listFetch(() => down ? json(503, {}) : json(200, listPage([{ address: A, karma }])));
+  const read = karmaReader({ origin: 'https://uain.test', fetchImpl, now: () => t });
+  assert.equal(await read(A), false);
+  karma = 20; t = 30_000;
+  assert.equal(await read(A), false, 'within a minute the same list answers');
+  t = 61_000;
+  assert.equal(await read(A), true);
+  down = true; t = 200_000;
+  assert.equal(await read(A), true, 'an accepted task stays accepted without a read');
+  assert.equal(await read(B), null, 'a failed read is unreadable');
+  down = false;
+  assert.equal(await read(B), false, 'and is not remembered');
+});

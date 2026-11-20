@@ -383,21 +383,61 @@ export function uainLlmsReader(origin = "https://uain.global", { fetchImpl = glo
   };
 }
 
-/** Accepted task = public Karma above 0 (every accepted AI$ award also gives Karma). */
-export function karmaReader({ origin = "https://uain.global", fetchImpl = globalThis.fetch, timeoutMs = 5000 } = {}) {
-  const cache = new Map();
-  return async (address) => {
-    const hit = cache.get(address);
-    if (hit === true) return true;
-    if (hit && Date.now() - hit < 60_000) return false;
-    const response = await fetchImpl(`${origin}/api/members/${address}`, { signal: AbortSignal.timeout(timeoutMs) });
-    if (response.status === 404) { cache.set(address, Date.now()); return false; }
-    if (!response.ok) return null;
+/** Accepted task = public Karma above 0 (every accepted AI$ award also gives Karma).
+ * Read from uain.global's member list, one proved read for every account in a report, not one
+ * /api/members/<address> per account: that lookup re-proves its record after every chain change
+ * and took 3 to 4.3 s there, so with the network time from BAINK it passed the 5 s limit on about
+ * one read in six (20 November 2026). The list is a page uain.global keeps proved ahead of time.
+ * Answers true, false (not a member, or Karma 0 on a complete list) or null (the list could not
+ * be read whole: 503 while it is being proved, an error, an unproved or non-native list, or pages
+ * that do not belong to one snapshot). A member once seen above 0 stays true: an accepted task
+ * stays accepted. A complete list is reused for 60 s; a failed read is never kept. */
+export function karmaReader({ origin = "https://uain.global", fetchImpl = globalThis.fetch, timeoutMs = 25_000, maxPages = 50, now = Date.now } = {}) {
+  const accepted = new Set();
+  let snapshot = null, inflight = null;
+  const page = async (n, signal) => {
+    const response = await fetchImpl(`${origin}/api/members?page_size=200&page=${n}`, { signal, headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`member list answered ${response.status}`);
     const body = await response.json();
-    if (body?.address !== address || !Number.isFinite(Number(body.karma))) return null;
-    const accepted = Number(body.karma) > 0;
-    cache.set(address, accepted ? true : Date.now());
-    return accepted;
+    const proved = body?.proved;
+    if (body?.authority !== "native" || !proved || typeof proved.as_of !== "string" || !Array.isArray(body.members)
+      || !Number.isInteger(body.count) || !Number.isInteger(body.pages) || body.page !== n) throw new Error("member list is not a proved native page");
+    return body;
+  };
+  const load = async () => {
+    // uain.global answers a list page at once from its proved copy, or waits for one up to 20 s
+    // and then says 503; the limit covers that wait, so a slow answer is never cut short.
+    const signal = AbortSignal.timeout(timeoutMs);
+    const first = await page(1, signal);
+    if (first.pages > maxPages) throw new Error("member list has too many pages");
+    const karma = new Map();
+    let rows = 0;
+    const add = (body) => { rows += body.members.length; for (const m of body.members) if (typeof m?.address === "string") karma.set(m.address, typeof m.karma === "number" && Number.isFinite(m.karma) ? m.karma : null); };
+    add(first);
+    for (let n = 2; n <= first.pages; n++) {
+      const body = await page(n, signal);
+      // Every page must come from the same proved snapshot, or a member could fall between two.
+      if (body.proved.as_of !== first.proved.as_of || body.count !== first.count || body.pages !== first.pages) throw new Error("member list pages belong to different snapshots");
+      add(body);
+    }
+    // Complete means every member the list counts was read; a short list would turn members into "not yet".
+    if (rows !== first.count) throw new Error(`member list gave ${rows} of ${first.count} members`);
+    return { karma, at: now() };
+  };
+  const current = () => {
+    if (snapshot && now() - snapshot.at < 60_000) return Promise.resolve(snapshot);
+    inflight ??= load().then((s) => { snapshot = s; return s; }).finally(() => { inflight = null; });
+    return inflight;
+  };
+  return async (address) => {
+    if (accepted.has(address)) return true;
+    let s;
+    try { s = await current(); } catch { return null; }
+    const karma = s.karma.get(address);
+    if (karma === undefined) return false;
+    if (karma === null) return null;
+    if (karma > 0) accepted.add(address);
+    return karma > 0;
   };
 }
 
