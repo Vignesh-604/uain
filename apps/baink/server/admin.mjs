@@ -82,7 +82,7 @@ export const normalEmail = (email) => {
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const pct = (part, whole) => (whole > 0 ? ` <span class="pct">${Math.round((part / whole) * 1000) / 10}%</span>` : "");
 
-export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberAccounts, clientIp, secureCookie = true, uainOrigin = "https://uain.global", now = Date.now }) {
+export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberAccounts, memberOrigins, clientIp, secureCookie = true, uainOrigin = "https://uain.global", now = Date.now }) {
   const sessions = new Map(); // sha256(token) -> { email, expires }
   // Failed attempts (13 November 2026, B1-6): one log per key kind, so failures
   // from many addresses or unknown emails can never push an admin email's
@@ -199,6 +199,7 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberA
     const list = await members();
     let classes = {};
     try { const parsed = JSON.parse(await readFile(join(dataDir, "admin-member-classes.json"), "utf8")); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) classes = parsed; } catch {}
+    const origins = await memberOrigins?.() ?? {};
     const accounts = new Map((memberAccounts?.() ?? []).map((a) => [a.address, a]));
     const rows = new Map((list ?? []).filter((m) => !m.archival).map((m) => [m.address, {
       address: m.address, name: m.name || m.address, karma: Number.isFinite(m.karma) ? m.karma : null,
@@ -207,8 +208,11 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberA
     for (const r of rows.values()) {
       r.source = accounts.get(r.address)?.via || "Unknown / unattributed";
       r.group = ["External", "Team-test"].includes(classes[r.address]) ? classes[r.address] : "Unclassified";
+      const origin = origins[r.address];
+      r.ip = typeof origin?.ip === "string" ? origin.ip : null;
+      r.location = typeof origin?.location === "string" && origin.location ? origin.location : "Unknown";
     }
-    const columns = { name: "Member", source: "Source", group: "Classification", karma: "Karma" };
+    const columns = { name: "Member", source: "Source", group: "Classification", location: "Signup location (approx.)", karma: "Karma" };
     const column = Object.hasOwn(columns, query?.get("memberSort")) ? query.get("memberSort") : "karma";
     const dir = query?.get("memberDir") === "asc" ? "asc" : "desc";
     const ordered = [...rows.values()].sort((a, b) => {
@@ -218,14 +222,38 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberA
       return dir === "asc" ? x : -x;
     });
     const headers = Object.entries(columns).map(([key, label]) => {
-      const q = new URLSearchParams(query); q.set("memberSort", key); q.set("memberDir", column === key && dir === "desc" ? "asc" : "desc");
+      const q = new URLSearchParams(query); q.set("tab", "members"); q.set("memberSort", key); q.set("memberDir", column === key && dir === "desc" ? "asc" : "desc");
       return `<th><a href="/admin?${esc(q.toString())}#members">${label}</a>${column === key ? (dir === "asc" ? " ▲" : " ▼") : ""}</th>`;
     }).join("");
-    return `<section id="members"><h2>Members</h2><p class="note">${list ? ordered.length : "Known local"} accounts, not people. Includes members without campaign attribution. Source is the stored campaign code, never inferred. Classification uses an explicit address list; other accounts are Unclassified. Karma is shown; earnings are not loaded here.${list ? "" : " Member list unreadable; local accounts shown with unknown Karma."}</p><table><thead><tr>${headers}</tr></thead><tbody>${ordered.map((r) => `<tr><td>${esc(r.name)}<div class="code">${esc(r.address)}</div></td><td>${esc(r.source)}</td><td>${esc(r.group)}</td><td>${r.karma === null ? "Unknown" : r.karma}</td></tr>`).join("") || '<tr><td colspan="4">No accounts available.</td></tr>'}</tbody></table></section>`;
+    const cell = (r) => `<tr><td>${esc(r.name)}<div class="code">${esc(r.address)}</div></td><td>${esc(r.source)}</td><td>${esc(r.group)}</td><td>${esc(r.location)}${r.ip ? `<details><summary>Reveal signup IP</summary><code>${esc(r.ip)}</code></details>` : ""}</td><td>${r.karma === null ? "Unknown" : r.karma}</td></tr>`;
+    const grouped = query?.get("groupBy") === "ip";
+    let body = ordered.map(cell).join("");
+    if (grouped) {
+      const groups = new Map();
+      for (const r of ordered) {
+        // Unknown IPs never imply one shared operator: each is its own group.
+        const key = r.ip || `unknown:${r.address}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(r);
+      }
+      body = [...groups.values()].map(rs => {
+        const known = rs.filter(r => r.karma !== null);
+        const karma = known.reduce((n, r) => n + r.karma, 0);
+        return `<tr class="ip-group"><th colspan="5">${esc(rs[0].location)} · ${rs.length} account${rs.length === 1 ? "" : "s"} · ${known.length ? `${karma} known Karma` : "Unknown Karma"}${known.length < rs.length ? ` (${rs.length - known.length} unknown)` : ""}${rs[0].ip ? " · shared signup IP" : " · signup IP unknown"}</th></tr>` + rs.map(cell).join("");
+      }).join("");
+    }
+    const toggle = new URLSearchParams(query); toggle.set("tab", "members");
+    if (grouped) toggle.delete("groupBy"); else toggle.set("groupBy", "ip");
+    return `<section id="members"><h2>Members</h2><p class="note">${list ? ordered.length : "Known local"} accounts, not people. Includes members without campaign attribution. Source is the stored campaign code, never inferred. Classification uses an explicit address list; other accounts are Unclassified. Karma is shown; earnings are not loaded here.${list ? "" : " Member list unreadable; local accounts shown with unknown Karma."}</p><p class="note">Location is approximate at signup, not current location. Same IP does not prove the same person; shared networks and VPNs exist. Missing, ambiguous or relayed signup evidence stays Unknown. Locations are cached privately, not looked up on page load.</p><p><a href="/admin?${esc(toggle.toString())}#members">${grouped ? "Ungroup accounts" : "Group by signup IP"}</a></p><table><thead><tr>${headers}</tr></thead><tbody>${body || '<tr><td colspan="5">No accounts available.</td></tr>'}</tbody></table></section>`;
   }
 
   async function dashboard(session, query) {
     const order = sortOf(query);
+    const tab = ["members", "posts", "replies"].includes(query?.get("tab")) ? query.get("tab") : query?.has("memberSort") ? "members" : "posts";
+    const tabs = ["members", "posts", "replies"].map(value => {
+      const q = new URLSearchParams(query); q.set("tab", value);
+      return `<a ${tab === value ? 'aria-current="page"' : ""} href="/admin?${esc(q.toString())}">${value[0].toUpperCase() + value.slice(1)}</a>`;
+    }).join(" · ");
     const head = (column, label) => {
       const on = order.sort === column;
       const first = column === "name" ? "asc" : "desc";
@@ -251,10 +279,8 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberA
       return { ...r, _html: line(r, name, `${esc(r.code)}${p ? ` · ${esc(PLATFORM_NAMES[p.platform] ?? p.platform)} · ${esc(STATUS_NAMES[p.status] ?? p.status)}` : ""}`) };
     });
     return `${nav(session, "numbers")}
-<main><p class="note">Per link (<code>uain.global/go/&lt;code&gt;</code>; the older <code>baink.money/go/&lt;code&gt;</code> counts under the same code). Draft posts and replies not yet posted are left out. Opened counts people and agents; link-preview and crawler bots are left out (${postData.concat(replyData).reduce((n, r) => n + (r.bots ?? 0), 0)} on these rows). Each percentage is of the column before it. Read ${esc(report.generatedAt)}; page reads lag by up to a minute.</p>
-${await memberTable(query)}
-${table("Posts", postRows, "No posts yet.")}
-${table("Replies", replyRows, "No replies posted yet.")}
+<main><nav aria-label="Numbers tabs">${tabs}</nav><p class="note">Per link (<code>uain.global/go/&lt;code&gt;</code>; the older <code>baink.money/go/&lt;code&gt;</code> counts under the same code). Draft posts and replies not yet posted are left out. Opened counts people and agents; link-preview and crawler bots are left out (${postData.concat(replyData).reduce((n, r) => n + (r.bots ?? 0), 0)} on these rows). Each percentage is of the column before it. Read ${esc(report.generatedAt)}; page reads lag by up to a minute.</p>
+${tab === "members" ? await memberTable(query) : tab === "replies" ? table("Replies", replyRows, "No replies posted yet.") : table("Posts", postRows, "No posts yet.")}
 <details><summary>What each column counts</summary><p>${esc(report.note)}</p></details></main>`;
   }
 

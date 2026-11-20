@@ -52,6 +52,7 @@ const app = await createBainkServer({
     .map((value) => value.trim())
     .filter(Boolean),
   trustProxy: process.env.BAINK_TRUST_PROXY === "1",
+  signupServiceIps: (process.env.BAINK_SIGNUP_SERVICE_IPS ?? "").split(",").map(s => s.trim()).filter(Boolean),
   nativeConfig: nativeConfigFromEnv(process.env),
   nativeStateSSHEnabled: process.env.BAINK_NATIVE_STATE_SSH_ENABLED === "1",
   nativeAccountBatchingEnabled: process.env.BAINK_NATIVE_ACCOUNT_BATCHING_ENABLED === "1",
