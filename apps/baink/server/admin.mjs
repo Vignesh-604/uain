@@ -178,7 +178,9 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberA
 
   // Numbers can be sorted by any column with ?sort=<column>&dir=asc|desc (plain links, no script).
   // A number column starts largest first, the name column A to Z; ties keep the default order.
-  const SORT_COLUMNS = { name: "Name", reads: "Opened", accounts: "Joined", enrolled: "Enrolled", acceptedTask: "First task accepted", spent: "First spend" };
+  const validDate = value => typeof value === "string" && /^\d{4}-\d\d-\d\dT/.test(value) && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
+  const dateCell = value => value ? `<time datetime="${esc(value)}">${esc(value.replace("T", " ").slice(0, 16))} UTC</time>` : "—";
+  const SORT_COLUMNS = { date: "Updated", name: "Name", reads: "Opened", accounts: "Joined", enrolled: "Enrolled", acceptedTask: "First task accepted", spent: "First spend" };
   function sortOf(query) {
     const sort = Object.hasOwn(SORT_COLUMNS, query?.get("sort")) ? query.get("sort") : null;
     if (!sort) return { sort: null, dir: null };
@@ -188,9 +190,9 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberA
   function sorted(rows, { sort, dir }, nameOf) {
     if (!sort) return rows;
     const sign = dir === "asc" ? 1 : -1;
-    const key = (r) => (sort === "name" ? String(nameOf(r) ?? "").toLowerCase() : Number(r[sort]) || 0);
+    const key = (r) => sort === "date" ? (r.date ? Date.parse(r.date) : null) : (sort === "name" ? String(nameOf(r) ?? "").toLowerCase() : Number(r[sort]) || 0);
     return rows.map((r, i) => ({ r, i, k: key(r) }))
-      .sort((a, b) => (a.k < b.k ? -sign : a.k > b.k ? sign : a.i - b.i))
+      .sort((a, b) => a.k === null ? (b.k === null ? a.i - b.i : 1) : b.k === null ? -1 : (a.k < b.k ? -sign : a.k > b.k ? sign : a.i - b.i))
       .map(({ r }) => r);
   }
 
@@ -202,17 +204,18 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberA
     const origins = await memberOrigins?.() ?? {};
     const accounts = new Map((memberAccounts?.() ?? []).map((a) => [a.address, a]));
     const rows = new Map((list ?? []).filter((m) => !m.archival).map((m) => [m.address, {
-      address: m.address, name: m.name || m.address, karma: Number.isFinite(m.karma) ? m.karma : null,
+      address: m.address, name: m.name || m.address, joined: validDate(m.joined_at), karma: Number.isFinite(m.karma) ? m.karma : null,
     }]));
-    for (const a of accounts.values()) if (!rows.has(a.address)) rows.set(a.address, { address: a.address, name: a.name || a.address, karma: null });
+    for (const a of accounts.values()) if (!rows.has(a.address)) rows.set(a.address, { address: a.address, name: a.name || a.address, joined: null, karma: null });
     for (const r of rows.values()) {
+      r.joined = validDate(accounts.get(r.address)?.createdAt) ?? r.joined;
       r.source = accounts.get(r.address)?.via || "Unknown / unattributed";
       r.group = ["External", "Team-test"].includes(classes[r.address]) ? classes[r.address] : "Unclassified";
       const origin = origins[r.address];
       r.ip = typeof origin?.ip === "string" ? origin.ip : null;
       r.location = typeof origin?.location === "string" && origin.location ? origin.location : "Unknown";
     }
-    const columns = { name: "Member", source: "Source", group: "Classification", location: "Signup location (approx.)", karma: "Karma" };
+    const columns = { name: "Member", joined: "Joined", source: "Source", group: "Classification", location: "Signup location (approx.)", karma: "Karma" };
     const column = Object.hasOwn(columns, query?.get("memberSort")) ? query.get("memberSort") : "karma";
     const dir = query?.get("memberDir") === "asc" ? "asc" : "desc";
     const ordered = [...rows.values()].sort((a, b) => {
@@ -225,7 +228,7 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberA
       const q = new URLSearchParams(query); q.set("tab", "members"); q.set("memberSort", key); q.set("memberDir", column === key && dir === "desc" ? "asc" : "desc");
       return `<th><a href="/admin?${esc(q.toString())}#members">${label}</a>${column === key ? (dir === "asc" ? " ▲" : " ▼") : ""}</th>`;
     }).join("");
-    const cell = (r) => `<tr><td>${esc(r.name)}<div class="code">${esc(r.address)}</div></td><td>${esc(r.source)}</td><td>${esc(r.group)}</td><td>${esc(r.location)}${r.ip ? `<details><summary>Reveal signup IP</summary><code>${esc(r.ip)}</code></details>` : ""}</td><td>${r.karma === null ? "Unknown" : r.karma}</td></tr>`;
+    const cell = (r) => `<tr><td>${esc(r.name)}<div class="code">${esc(r.address)}</div></td><td>${dateCell(r.joined)}</td><td>${esc(r.source)}</td><td>${esc(r.group)}</td><td>${esc(r.location)}${r.ip ? `<details><summary>Reveal signup IP</summary><code>${esc(r.ip)}</code></details>` : ""}</td><td>${r.karma === null ? "Unknown" : r.karma}</td></tr>`;
     const grouped = query?.get("groupBy") === "ip";
     let body = ordered.map(cell).join("");
     if (grouped) {
@@ -239,12 +242,12 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberA
       body = [...groups.values()].map(rs => {
         const known = rs.filter(r => r.karma !== null);
         const karma = known.reduce((n, r) => n + r.karma, 0);
-        return `<tr class="ip-group"><th colspan="5">${esc(rs[0].location)} · ${rs.length} account${rs.length === 1 ? "" : "s"} · ${known.length ? `${karma} known Karma` : "Unknown Karma"}${known.length < rs.length ? ` (${rs.length - known.length} unknown)` : ""}${rs[0].ip ? " · shared signup IP" : " · signup IP unknown"}</th></tr>` + rs.map(cell).join("");
+        return `<tr class="ip-group"><th colspan="6">${esc(rs[0].location)} · ${rs.length} account${rs.length === 1 ? "" : "s"} · ${known.length ? `${karma} known Karma` : "Unknown Karma"}${known.length < rs.length ? ` (${rs.length - known.length} unknown)` : ""}${rs[0].ip ? " · shared signup IP" : " · signup IP unknown"}</th></tr>` + rs.map(cell).join("");
       }).join("");
     }
     const toggle = new URLSearchParams(query); toggle.set("tab", "members");
     if (grouped) toggle.delete("groupBy"); else toggle.set("groupBy", "ip");
-    return `<section id="members"><h2>Members</h2><p class="note">${list ? ordered.length : "Known local"} accounts, not people. Includes members without campaign attribution. Source is the stored campaign code, never inferred. Classification uses an explicit address list; other accounts are Unclassified. Karma is shown; earnings are not loaded here.${list ? "" : " Member list unreadable; local accounts shown with unknown Karma."}</p><p class="note">Location is approximate at signup, not current location. Same IP does not prove the same person; shared networks and VPNs exist. Missing, ambiguous or relayed signup evidence stays Unknown. Locations are cached privately, not looked up on page load.</p><p><a href="/admin?${esc(toggle.toString())}#members">${grouped ? "Ungroup accounts" : "Group by signup IP"}</a></p><table><thead><tr>${headers}</tr></thead><tbody>${body || '<tr><td colspan="5">No accounts available.</td></tr>'}</tbody></table></section>`;
+    return `<section id="members"><h2>Members</h2><p class="note">${list ? ordered.length : "Known local"} accounts, not people. Includes members without campaign attribution. Source is the stored campaign code, never inferred. Classification uses an explicit address list; other accounts are Unclassified. Karma is shown; earnings are not loaded here.${list ? "" : " Member list unreadable; local accounts shown with unknown Karma."}</p><p class="note">Joined uses local account creation time, otherwise a valid native join time; unavailable dates are blank and sorted last. Location is approximate at signup, not current location. Same IP does not prove the same person; shared networks and VPNs exist. Missing, ambiguous or relayed signup evidence stays Unknown. Locations are cached privately, not looked up on page load.</p><p><a href="/admin?${esc(toggle.toString())}#members">${grouped ? "Ungroup accounts" : "Group by signup IP"}</a></p><table><thead><tr>${headers}</tr></thead><tbody>${body || '<tr><td colspan="6">No accounts available.</td></tr>'}</tbody></table></section>`;
   }
 
   async function dashboard(session, query) {
@@ -265,16 +268,16 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberA
     const { report, postRows: postData, replyRows: replyData } = await numbers();
     const line = (r, name, sub) => {
       const out = r.url ? ` <a href="${esc(r.url)}" rel="noopener noreferrer" target="_blank" title="Open it">↗</a>` : "";
-      return `<tr><td>${name}${out}<div class="code">${sub}</div></td><td>${r.reads}</td><td>${r.accounts}${pct(r.accounts, r.reads)}</td><td>${r.enrolled}${pct(r.enrolled, r.accounts)}</td><td>${r.acceptedTask}${pct(r.acceptedTask, r.enrolled)}${r.acceptedTaskUnknown ? ` <span class="pct">(+${r.acceptedTaskUnknown} unreadable)</span>` : ""}</td><td>${r.spent}${pct(r.spent, r.acceptedTask)}</td></tr>`;
+      return `<tr><td>${name}${out}<div class="code">${sub}</div></td><td>${dateCell(r.date)}</td><td>${r.reads}</td><td>${r.accounts}${pct(r.accounts, r.reads)}</td><td>${r.enrolled}${pct(r.enrolled, r.accounts)}</td><td>${r.acceptedTask}${pct(r.acceptedTask, r.enrolled)}${r.acceptedTaskUnknown ? ` <span class="pct">(+${r.acceptedTaskUnknown} unreadable)</span>` : ""}</td><td>${r.spent}${pct(r.spent, r.acceptedTask)}</td></tr>`;
     };
     const table = (title, rows, empty) => {
       const total = totalOf(rows);
-      const body = rows.map((r) => r._html).join("") || `<tr><td colspan="6" class="note">${empty}</td></tr>`;
-      return `<h2>${title}</h2><table><thead><tr>${head("name", title === "Replies" ? "Reply" : "Post")}${head("reads", "Opened")}${head("accounts", "Joined")}${head("enrolled", "Enrolled")}${head("acceptedTask", "First task accepted")}${head("spent", "First spend")}</tr></thead>
-<tbody>${body}</tbody><tfoot><tr><td>Total</td><td>${total.reads}</td><td>${total.accounts}</td><td>${total.enrolled}</td><td>${total.acceptedTask}</td><td>${total.spent}</td></tr></tfoot></table>`;
+      const body = rows.map((r) => r._html).join("") || `<tr><td colspan="7" class="note">${empty}</td></tr>`;
+      return `<h2>${title}</h2><table><thead><tr>${head("name", title === "Replies" ? "Reply" : "Post")}${head("date", "Updated")}${head("reads", "Opened")}${head("accounts", "Joined")}${head("enrolled", "Enrolled")}${head("acceptedTask", "First task accepted")}${head("spent", "First spend")}</tr></thead>
+<tbody>${body}</tbody><tfoot><tr><td>Total</td><td></td><td>${total.reads}</td><td>${total.accounts}</td><td>${total.enrolled}</td><td>${total.acceptedTask}</td><td>${total.spent}</td></tr></tfoot></table>`;
     };
-    const replyRows = sorted(replyData, order, (r) => r.reply.threadTitle).map(({ reply, ...r }) => ({ ...r, _html: line(r, `<a href="/admin/replies#${esc(r.code)}">${esc(reply.threadTitle)}</a>`, `${esc(r.code)} · ${esc(reply.where || PLATFORM_NAMES[reply.platform])}`) }));
-    const postRows = sorted(postData, order, (r) => r.label).map(({ post: p, ...r }) => {
+    const replyRows = sorted(replyData.map(r => ({ ...r, date: validDate(r.reply.updatedAt) ?? validDate(r.reply.createdAt) })), order, (r) => r.reply.threadTitle).map(({ reply, ...r }) => ({ ...r, _html: line(r, `<a href="/admin/replies#${esc(r.code)}">${esc(reply.threadTitle)}</a>`, `${esc(r.code)} · ${esc(reply.where || PLATFORM_NAMES[reply.platform])}`) }));
+    const postRows = sorted(postData.map(r => ({ ...r, date: validDate(r.post?.updatedAt) ?? validDate(r.post?.createdAt) })), order, (r) => r.label).map(({ post: p, ...r }) => {
       const name = p ? `<a href="/admin/posts/${esc(r.code)}">${esc(r.label)}</a>` : esc(r.label);
       return { ...r, _html: line(r, name, `${esc(r.code)}${p ? ` · ${esc(PLATFORM_NAMES[p.platform] ?? p.platform)} · ${esc(STATUS_NAMES[p.status] ?? p.status)}` : ""}`) };
     });
