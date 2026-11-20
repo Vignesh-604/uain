@@ -82,6 +82,8 @@ export function validateConfig(c) {
   need(Array.isArray(c.agents) && c.agents.length >= 1 && c.agents.length <= 16, 'config agents');
   need(new Set(c.agents.map((a) => a.name)).size === c.agents.length, 'config agent names repeat');
   for (const a of c.agents) need(NAME.test(a?.name ?? '') && absolute(a.home), 'config agent');
+  // displayName is the agent's public member name (after a member_rename); name stays the folder and socket slug.
+  for (const a of c.agents) if (a.displayName !== undefined) need(typeof a.displayName === 'string' && a.displayName === a.displayName.trim() && a.displayName.length >= 2 && a.displayName.length <= 120 && !/[\u0000-\u001f\u007f-\u009f"]/.test(a.displayName), 'config agent displayName');
   need(Number.isInteger(c.timeoutMs) && c.timeoutMs >= 60000 && c.timeoutMs <= 1800000, 'config timeoutMs');
   need(Number.isInteger(c.maxTurns) && c.maxTurns >= 4 && c.maxTurns <= 80, 'config maxTurns');
   if (c.listRetryMs !== undefined) need(Number.isInteger(c.listRetryMs) && c.listRetryMs >= 0 && c.listRetryMs <= 120000, 'config listRetryMs');
@@ -347,7 +349,7 @@ export async function cycle({ config, agentName, dryRun = false, runner = run, l
     if (before.claimableCount === null) return finish(config, { ...base, outcome: 'skipped', reason: 'task_list_unreadable', error: listError ?? before.statusError ?? before.historyError });
     if (before.claimableCount < minClaimable) return finish(config, { ...base, outcome: 'left_for_members', reason: `fewer than ${minClaimable} claimable tasks` });
     const offered = candidates(listed.tasks);
-    const prompt = housePrompt({ name: agent.name, dryRun, offered, engine, toolNames: config.kitToolNames });
+    const prompt = housePrompt({ name: agent.displayName ?? agent.name, dryRun, offered, engine, toolNames: config.kitToolNames });
     if (engine === 'codex') return finish(config, await codexRun({ config, agent, dryRun, prompt, offered, base, before, runner, now }));
 
     const budget = openComputeBudget({ directory: join(config.stateDir, 'compute'), now, ...(config.limits ? { limits: config.limits } : {}) });
