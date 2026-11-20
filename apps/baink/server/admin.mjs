@@ -256,7 +256,7 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberA
     const tabs = ["members", "posts", "replies"].map(value => {
       const q = new URLSearchParams(query); q.set("tab", value);
       return `<a ${tab === value ? 'aria-current="page"' : ""} href="/admin?${esc(q.toString())}">${value[0].toUpperCase() + value.slice(1)}</a>`;
-    }).join(" · ");
+    }).join("");
     const head = (column, label) => {
       const on = order.sort === column;
       const first = column === "name" ? "asc" : "desc";
@@ -598,6 +598,7 @@ button{padding:8px 16px;border:0;border-radius:6px;background:#0a9be0;color:#fff
 .msg{background:#fdecec;color:#8a1c1c;padding:8px 12px;border-radius:6px}
 table{width:100%;border-collapse:collapse;background:#fff}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #e3e8ef}
 th{background:#eef2f7;font-weight:600}th a{color:inherit;text-decoration:none}th a:hover{text-decoration:underline}th.on{background:#dde6f1}.sort{font-size:11px;color:#4a5a70}tfoot td{font-weight:600}.code{font:12px monospace;color:#6b7a90}.pct{color:#6b7a90;font-size:13px}.note{color:#4a5a70}
+nav[aria-label="Numbers tabs"]{display:flex;gap:8px;margin:0 0 20px;border-bottom:1px solid #c5ced9;padding-bottom:10px}nav[aria-label="Numbers tabs"] a{padding:8px 18px;border-radius:6px;text-decoration:none;color:#17436b;background:#e8eef5}nav[aria-label="Numbers tabs"] a[aria-current="page"]{background:#123a63;color:white;font-weight:600}
 header nav{display:flex;gap:6px}header nav a{color:#cfe3f5;text-decoration:none;padding:6px 12px;border-radius:6px}header nav a.on{background:#123a63;color:#fff}header nav a.new{background:#0a9be0;color:#fff}
 h2{font-size:17px;margin:28px 0 8px}.filters{display:flex;gap:6px;flex-wrap:wrap}.filters a{padding:4px 10px;border-radius:14px;background:#e6ecf3;color:#14213d;text-decoration:none;font-size:13px}.filters a.on{background:#0b2a4a;color:#fff}
 .edit{max-width:820px}.edit textarea,.edit select{display:block;width:100%;box-sizing:border-box;padding:8px;margin-top:4px;border:1px solid #c5ced9;border-radius:6px;font:inherit}
