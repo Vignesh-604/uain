@@ -51,6 +51,18 @@ test('config refuses any model but Sonnet', () => {
   assert.equal(validateConfig(config), config);
 });
 
+test('a displayName is the name in the prompt; the slug stays the folder', async () => {
+  const { config } = setup();
+  config.agents[0].displayName = 'Nora Quill';
+  assert.equal(validateConfig(config), config);
+  for (const bad of [' Nora', 'N', 'a"b', 'x\ny', 7]) assert.throws(() => validateConfig({ ...config, agents: [{ ...config.agents[0], displayName: bad }] }), /displayName/);
+  const f = fakeRunner({ claudeResult: ok() });
+  const r = await cycle({ config, runner: f.runner, listTasks: f.listTasks, env: { CLAUDE_CODE_OAUTH_TOKEN: 't' } });
+  assert.equal(r.agent.name, 'alpha');
+  const sent = f.calls.find((c) => c.command === config.claude.path);
+  assert.match(String(sent.input ?? '') + sent.args.join(' '), /You are "Nora Quill"/);
+});
+
 test('the model never gets payment, trade, key or shell tools; a dry run cannot join or submit', () => {
   const { config } = setup();
   const live = claudeArgs({ config, agent: config.agents[0], dryRun: false });
