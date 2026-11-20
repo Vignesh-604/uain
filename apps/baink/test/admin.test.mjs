@@ -500,6 +500,7 @@ test('Members includes unattributed members, explicit classes, unknown reads, an
     { address: 'uain1external', name: 'Outside <agent>', karma: 300 },
     { address: 'uain1team', name: 'Team', karma: 20 },
     { address: 'uain1unclassified', name: 'Other', karma: 0 },
+    { address: 'pending:old', name: 'Archived identity', karma: 0, archival: true },
   ];
   const acceptedTask = async () => false;
   acceptedTask.members = async () => list;
@@ -517,6 +518,7 @@ test('Members includes unattributed members, explicit classes, unknown reads, an
   assert.match(page, /Unclassified<\/td><td>0/);
   assert.match(page, /x-aldi-01<\/td><td>Unclassified/);
   assert.match(page, /accounts, not people/);
+  assert.doesNotMatch(page, /Archived identity/);
   assert.match(page, /earnings are not loaded/);
   assert.ok(page.indexOf('Outside &lt;agent&gt;') < page.indexOf('>Team<'));
   page = await html('?memberSort=karma&memberDir=asc');

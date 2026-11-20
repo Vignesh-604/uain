@@ -200,7 +200,7 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberA
     let classes = {};
     try { const parsed = JSON.parse(await readFile(join(dataDir, "admin-member-classes.json"), "utf8")); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) classes = parsed; } catch {}
     const accounts = new Map((memberAccounts?.() ?? []).map((a) => [a.address, a]));
-    const rows = new Map((list ?? []).map((m) => [m.address, {
+    const rows = new Map((list ?? []).filter((m) => !m.archival).map((m) => [m.address, {
       address: m.address, name: m.name || m.address, karma: Number.isFinite(m.karma) ? m.karma : null,
     }]));
     for (const a of accounts.values()) if (!rows.has(a.address)) rows.set(a.address, { address: a.address, name: a.name || a.address, karma: null });
