@@ -82,7 +82,7 @@ export const normalEmail = (email) => {
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const pct = (part, whole) => (whole > 0 ? ` <span class="pct">${Math.round((part / whole) * 1000) / 10}%</span>` : "");
 
-export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberAccounts, memberOrigins, clientIp, secureCookie = true, uainOrigin = "https://uain.global", now = Date.now }) {
+export function createAdmin({ dataDir, feedback = null, campaigns, acceptedTask, members, memberAccounts, memberOrigins, clientIp, secureCookie = true, uainOrigin = "https://uain.global", now = Date.now }) {
   const sessions = new Map(); // sha256(token) -> { email, expires }
   // Failed attempts (13 November 2026, B1-6): one log per key kind, so failures
   // from many addresses or unknown emails can never push an admin email's
@@ -157,7 +157,7 @@ export function createAdmin({ dataDir, campaigns, acceptedTask, members, memberA
   // baink.money/go/<code> is the same code and count, kept for links already out.
   const goLink = (origin, code) => `${uainOrigin}/go/${code}`;
   const bainkGoLink = (origin, code) => `${origin}/go/${code}`;
-  const nav = (session, active) => `<header><h1>BAINK marketing</h1><nav><a href="/admin"${active === "numbers" ? ' class="on"' : ""}>Numbers</a><a href="/admin/posts"${active === "posts" ? ' class="on"' : ""}>Posts</a><a href="/admin/replies"${active === "replies" ? ' class="on"' : ""}>Replies</a><a href="/admin/posts/new" class="new">+ New post</a></nav><form method="post" action="/admin/logout"><span>${esc(session.email)}</span><button type="submit">Log out</button></form></header>`;
+  const nav = (session, active) => `<header><h1>BAINK marketing</h1><nav><a href="/admin"${active === "numbers" ? ' class="on"' : ""}>Numbers</a><a href="/admin/posts"${active === "posts" ? ' class="on"' : ""}>Posts</a><a href="/admin/replies"${active === "replies" ? ' class="on"' : ""}>Replies</a>${feedback?.enabled ? `<a href="/admin/feedback"${active === "feedback" ? ' class="on"' : ""}>Feedback${(() => { const n = feedback.openCount(); return n ? ` <span class="count">${n}</span>` : ""; })()}</a>` : ""}<a href="/admin/posts/new" class="new">+ New post</a></nav><form method="post" action="/admin/logout"><span>${esc(session.email)}</span><button type="submit">Log out</button></form></header>`;
 
   // What Numbers shows, for the page and for a marketing:read token: Draft posts
   // and replies that are New or Skipped are left out.
@@ -382,6 +382,38 @@ ${isNew ? "" : `<p class="note">Code <code>${esc(p.code)}</code> never changes. 
 <script>${COPY_JS}</script></main>`;
   }
 
+  // Feedback inbox (feedback.mjs): reports from members and newcomers. Private; nothing here is public.
+  const FB_STATUS = { new: "New", investigating: "Investigating", resolved: "Resolved", closed: "Closed" };
+  const FB_CATEGORY = { bug: "Bug", "task-review": "Task or review", suggestion: "Suggestion" };
+  const DELIVERY = { delivered: "Sent to Slack", pending: "Slack: retrying", failed: "Slack: failed", skipped: "Not notified", grouped: "Grouped with a pending notice", none: "—" };
+  function feedbackPage(session, params, msg = "") {
+    const filter = FB_STATUS[params.get("status")] ? params.get("status") : null;
+    const all = [];
+    for (let offset=0; offset<feedback.count(); offset+=500) all.push(...feedback.list(500, offset));
+    const rows = all.filter((r) => !filter || r.status === filter);
+    const counts = Object.fromEntries(Object.keys(FB_STATUS).map((k) => [k, all.filter((r) => r.status === k).length]));
+    const tabs = `<nav class="tabs" aria-label="Feedback status"><a href="/admin/feedback"${filter ? "" : ' class="on"'}>All <span class="count">${all.length}</span></a>${Object.entries(FB_STATUS).map(([k, v]) => `<a href="/admin/feedback?status=${k}"${filter === k ? ' class="on"' : ""}>${v} <span class="count">${counts[k]}</span></a>`).join("")}</nav>`;
+    const row = (r) => `<tr><td class="ptitle"><a href="/admin/feedback/${esc(r.id)}">${esc(r.summary)}</a><div class="sub">${esc(FB_CATEGORY[r.category] ?? r.category)}${r.stage ? ` · ${esc(r.stage)}` : ""}${r.errorCode ? ` · <code>${esc(r.errorCode)}</code>` : ""}${r.taskId ? ` · ${esc(r.taskId)}` : ""}</div></td><td>${esc(FB_STATUS[r.status])}</td><td class="code">${r.anonymous ? "anonymous" : esc(r.member)}</td><td class="date">${esc(r.createdAt.slice(0, 16).replace("T", " "))}</td><td class="date">${esc(DELIVERY[r.delivery] ?? r.delivery)}</td></tr>`;
+    const table = rows.length
+      ? `<table class="posts"><thead><tr><th>Report</th><th>Status</th><th>From</th><th>Received (UTC)</th><th>Notice</th></tr></thead><tbody>${rows.map(row).join("")}</tbody></table>`
+      : `<p class="note">No reports${filter ? ` marked ${esc(FB_STATUS[filter])}` : ""}.</p>`;
+    return `${nav(session, "feedback")}<main>${msg ? `<p class="ok">${esc(msg)}</p>` : ""}<h2>Feedback</h2><p class="note">Reports sent with the kit (<code>uain-agent feedback</code>), uain_feedback on uain.global/mcp or baink_feedback. Private to this admin; a reporter sees only its status and your reply. A task-review report never changes a verdict. Requester addresses are not stored.</p>${tabs}${table}</main>`;
+  }
+  function feedbackDetail(session, r, msg = "") {
+    const field = (label, value) => value ? `<tr><th>${label}</th><td>${value}</td></tr>` : "";
+    const delivery = `${r.similarReports > 1 ? `${r.similarReports} similar reports in 24h · ` : ""}${esc(DELIVERY[r.delivery] ?? r.delivery)}${r.deliveryAttempts ? ` (${r.deliveryAttempts} attempt${r.deliveryAttempts === 1 ? "" : "s"})` : ""}${r.deliveryError ? `, last error <code>${esc(r.deliveryError)}</code>` : ""}${r.deliveryNextAt ? `, next try ${esc(r.deliveryNextAt.slice(0, 16).replace("T", " "))} UTC` : ""}`;
+    return `${nav(session, "feedback")}<main class="edit"><p class="back"><a href="/admin/feedback">← All feedback</a></p>${msg ? `<p class="${msg === "Saved." ? "ok" : "msg"}">${esc(msg)}</p>` : ""}
+<h2>${esc(r.summary)}</h2>
+<table>${field("Report", `<code>${esc(r.id)}</code>`)}${field("Category", esc(FB_CATEGORY[r.category] ?? r.category))}${field("Status", esc(FB_STATUS[r.status]))}${field("From", r.anonymous ? "anonymous (not signed)" : `<code>${esc(r.member)}</code> (signed member)`)}${field("Received", esc(r.createdAt) + " UTC")}${field("Stage", esc(r.stage))}${field("Error code", r.errorCode ? `<code>${esc(r.errorCode)}</code>` : "")}${field("Task", esc(r.taskId))}${field("Submission", esc(r.submissionId))}${field("Client", esc([r.client, r.clientVersion].filter(Boolean).join(" ")))}${field("Slack notice", delivery)}</table>
+${r.details ? `<h2>Details</h2><div class="draft"><pre>${esc(r.details)}</pre></div>` : ""}
+<form method="post" action="/admin/feedback/${esc(r.id)}">
+<label>Status <select name="status">${Object.entries(FB_STATUS).map(([k, v]) => `<option value="${k}"${r.status === k ? " selected" : ""}>${v}</option>`).join("")}</select></label>
+<label>Reply the reporter sees <span class="hint">(optional, at most 600 characters)</span><textarea name="reply" rows="3" maxlength="600">${esc(r.reply ?? "")}</textarea></label>
+<label>Private notes <span class="hint">(only in this admin)</span><textarea name="notes" rows="4" maxlength="4000">${esc(r.notes ?? "")}</textarea></label>
+<button type="submit">Save</button></form>
+${r.updatedBy ? `<p class="note">Last changed by ${esc(r.updatedBy)} on ${esc(r.updatedAt.slice(0, 16).replace("T", " "))} UTC.</p>` : ""}</main>`;
+  }
+
   async function form(req) {
     const chunks = []; let length = 0;
     for await (const chunk of req) { length += chunk.length; if (length > 65536) return null; chunks.push(chunk); }
@@ -476,6 +508,32 @@ ${isNew ? "" : `<p class="note">Code <code>${esc(p.code)}</code> never changes. 
       if (req.method === "GET" && path === "/admin/api/replies") return readApi(req, res, origin, "replies");
       if (req.method !== "POST") { res.writeHead(405, { Allow: path === "/admin/api/replies" ? "GET, POST" : "POST" }); res.end(); return true; }
       return draftApi(req, res, origin, path === "/admin/api/replies" ? "replies" : "drafts");
+    }
+    const feedbackPath = /^\/admin\/feedback\/(FB-[a-f0-9-]{36})$/.exec(path);
+    if (feedback?.enabled && (path === "/admin/feedback" || feedbackPath)) {
+      if (req.method === "GET") {
+        const session = await current(req);
+        if (!session) return page(res, 200, "Log in", loginForm()), true;
+        if (!feedbackPath) return page(res, 200, "Feedback", feedbackPage(session, url.searchParams)), true;
+        const r = feedback.get(feedbackPath[1]);
+        if (!r) return page(res, 404, "Not found", `${nav(session, "feedback")}<main><p class="msg">No such report.</p></main>`), true;
+        return page(res, 200, "Feedback", feedbackDetail(session, r, url.searchParams.get("saved") === "1" ? "Saved." : "")), true;
+      }
+      if (req.method !== "POST" || !feedbackPath) return page(res, 405, "Not allowed", `<main class="login"><p class="msg">Method not allowed.</p></main>`, { Allow: feedbackPath ? "GET, POST" : "GET" }), true;
+      if (!sameOrigin(req, origin)) return page(res, 403, "Refused", `<main class="login"><p class="msg">Refused: cross-site request.</p></main>`), true;
+      const session = await current(req);
+      if (!session) return page(res, 303, "Log in", "", { Location: "/admin" }), true;
+      const fields = await form(req);
+      if (!fields) return page(res, 413, "Too large", `${nav(session, "feedback")}<main><p class="msg">Too long.</p></main>`), true;
+      try {
+        feedback.update(feedbackPath[1], { status: fields.get("status"), reply: fields.get("reply") ?? "", notes: fields.get("notes") ?? "" }, { by: session.email });
+      } catch (error) {
+        if (!["invalid_feedback", "feedback_missing"].includes(error.code)) throw error;
+        const r = feedback.get(feedbackPath[1]);
+        if (!r) return page(res, 404, "Not found", `${nav(session, "feedback")}<main><p class="msg">No such report.</p></main>`), true;
+        return page(res, 400, "Feedback", feedbackDetail(session, r, error.message)), true;
+      }
+      return page(res, 303, "Saved", "", { Location: `/admin/feedback/${feedbackPath[1]}?saved=1` }), true;
     }
     const replyPath = /^\/admin\/replies\/([a-z0-9][a-z0-9-]{0,39})$/.exec(path);
     if (path === "/admin/replies" || replyPath) {
@@ -599,6 +657,7 @@ button{padding:8px 16px;border:0;border-radius:6px;background:#0a9be0;color:#fff
 table{width:100%;border-collapse:collapse;background:#fff}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #e3e8ef}
 th{background:#eef2f7;font-weight:600}th a{color:inherit;text-decoration:none}th a:hover{text-decoration:underline}th.on{background:#dde6f1}.sort{font-size:11px;color:#4a5a70}tfoot td{font-weight:600}.code{font:12px monospace;color:#6b7a90}.pct{color:#6b7a90;font-size:13px}.note{color:#4a5a70}
 nav[aria-label="Numbers tabs"]{display:flex;gap:8px;margin:0 0 20px;border-bottom:1px solid #c5ced9;padding-bottom:10px}nav[aria-label="Numbers tabs"] a{padding:8px 18px;border-radius:6px;text-decoration:none;color:#17436b;background:#e8eef5}nav[aria-label="Numbers tabs"] a[aria-current="page"]{background:#123a63;color:white;font-weight:600}
+header nav .count{display:inline-block;min-width:18px;padding:0 6px;margin-left:4px;border-radius:9px;background:#e8590c;color:#fff;font-size:12px;text-align:center}
 header nav{display:flex;gap:6px}header nav a{color:#cfe3f5;text-decoration:none;padding:6px 12px;border-radius:6px}header nav a.on{background:#123a63;color:#fff}header nav a.new{background:#0a9be0;color:#fff}
 h2{font-size:17px;margin:28px 0 8px}.filters{display:flex;gap:6px;flex-wrap:wrap}.filters a{padding:4px 10px;border-radius:14px;background:#e6ecf3;color:#14213d;text-decoration:none;font-size:13px}.filters a.on{background:#0b2a4a;color:#fff}
 .edit{max-width:820px}.edit textarea,.edit select{display:block;width:100%;box-sizing:border-box;padding:8px;margin-top:4px;border:1px solid #c5ced9;border-radius:6px;font:inherit}

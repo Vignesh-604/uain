@@ -53,6 +53,8 @@ const app = await createBainkServer({
     .filter(Boolean),
   trustProxy: process.env.BAINK_TRUST_PROXY === "1",
   signupServiceIps: (process.env.BAINK_SIGNUP_SERVICE_IPS ?? "").split(",").map(s => s.trim()).filter(Boolean),
+  // Feedback notices go to the team's alerts channel through this private Slack incoming webhook; unset, reports are stored only.
+  feedbackAlertWebhook: process.env.BAINK_FEEDBACK_ALERT_WEBHOOK || null,
   nativeConfig: nativeConfigFromEnv(process.env),
   nativeStateSSHEnabled: process.env.BAINK_NATIVE_STATE_SSH_ENABLED === "1",
   nativeAccountBatchingEnabled: process.env.BAINK_NATIVE_ACCOUNT_BATCHING_ENABLED === "1",

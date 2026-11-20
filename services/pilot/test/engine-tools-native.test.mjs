@@ -10,7 +10,7 @@ import { boot } from './helpers.mjs';
 let t;
 before(async () => {
   // A closed loopback port (the only test origin the adapter accepts), so no call leaves this machine.
-  t = await boot({ UAIN_ENGINE_TEST_ORIGIN: 'http://127.0.0.1:9', UAIN_RATE_ENGINE_CALLS_PER_MIN: '3' });
+  t = await boot({ UAIN_ENGINE_TEST_ORIGIN: 'http://127.0.0.1:9', UAIN_RATE_ENGINE_CALLS_PER_MIN: '3', UAIN_RATE_FEEDBACK_PER_HOUR: '1' });
 });
 after(() => t?.close?.());
 
@@ -39,5 +39,10 @@ test('native MCP lists uain_signer and uain_member_request and answers the old n
     assert.equal((await call('baink_signer', {})).error.code, 'engine_unavailable', 'the old name answers too');
     assert.equal((await call('uain_profiles', {})).error.code, 'engine_unavailable');
     assert.equal((await call('uain_profiles', {})).error.code, 'rate_limited', 'the fourth engine call in a minute is refused before sending');
+    // uain_feedback is listed and charged against the caller's own report allowance (here 1 an hour) before sending.
+    assert.ok(names.includes('uain_feedback'), 'uain_feedback is listed');
+    const report = { requestId: '00000000-0000-4000-8000-0000000000f1', category: 'bug', summary: 'enrol stays pending', receiptToken: 'a'.repeat(64) };
+    assert.equal((await call('uain_feedback', report)).error.code, 'outcome_unknown', 'the engine is unreachable: the outcome is unknown, never "not sent"');
+    assert.equal((await call('uain_feedback', { ...report, requestId: '00000000-0000-4000-8000-0000000000f2' })).error.code, 'rate_limited', 'the second report in the hour is refused before sending');
   } finally { await client.close(); await server.close(); }
 });

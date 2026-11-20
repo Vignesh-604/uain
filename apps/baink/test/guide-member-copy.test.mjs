@@ -73,3 +73,14 @@ test('membership: the guide says where the one line is, in plain words', () => {
   for (const topic of ['start', 'review', 'earned', 'pay', 'receive', 'trade', 'refusal', 'key', 'find']) assert.ok(answer(topic).length < 800, topic + ' is ' + answer(topic).length);
   assert.ok(Buffer.byteLength(JSON.stringify(guideAnswer('baink', {}))) < 8000, 'the first screen stays small');
 });
+
+test("feedback: asking how to report a problem names the private report tool on each server and the kit command", () => {
+  for (const q of ["how do I report a bug?", "I want to give feedback", "the review is wrong", "suggestion for the team"]) assert.equal(guideAnswer("baink", { question: q }).topic, "feedback", q);
+  assert.equal(guideAnswer("baink", { question: "how do I pay someone" }).topic, "pay", "pay questions still go to pay");
+  const baink = guideAnswer("baink", { topic: "feedback" }), uain = guideAnswer("uain", { topic: "feedback" });
+  assert.equal(baink.nextStep.tool, "baink_feedback");
+  assert.equal(uain.nextStep.tool, "uain_feedback");
+  assert.doesNotMatch(uain.answer, /baink_feedback/, "uain.global names its own tool");
+  assert.match(baink.answer, /never changes a verdict or an award/);
+  assert.match(baink.answer, /node uain-agent\.mjs feedback --category bug/);
+});
