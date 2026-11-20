@@ -453,3 +453,43 @@ test('marketing:read is limited to 120 reads an hour per token', async (t) => {
   // Reads do not use up the drafts allowance, and the scope alone creates nothing.
   assert.equal((await fetch(f.base + '/admin/api/drafts', { method: 'POST', headers: { Authorization: `Bearer ${reader}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ platform: 'x', label: 'x' }) })).status, 403);
 });
+
+// 20 November 2026: Numbers can be sorted by any column through plain header links.
+test('numbers: headers sort each table by their column, a second click reverses, no sort keeps the default order', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'baink-admin-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const llmsFile = join(dir, 'llms.txt');
+  await writeFile(llmsFile, '# guide\n');
+  const campaigns = new Map([
+    ['x-alpha', { label: 'Alpha', intro: 'Hi.' }],
+    ['x-bravo', { label: 'bravo', intro: 'Hi.' }],
+    ['x-charlie', { label: 'Charlie', intro: 'Hi.' }],
+  ]);
+  const f = await fixture(t, { campaignLlmsFile: llmsFile, campaigns, campaignAcceptedTask: async () => false });
+  await writeUsers(f.dataDir, { 'aldi@example.com': { password: await hashPassword(PASSWORD), createdAt: '2026-11-10T00:00:00.000Z' } });
+  const go = (path, init = {}) => fetch(f.base + path, { redirect: 'manual', ...init, headers: { Origin: audience, ...init.headers } });
+  // Opened: Alpha 1, bravo 3, Charlie 2. Joined: only Charlie.
+  for (const [code, n] of [['x-alpha', 1], ['x-bravo', 3], ['x-charlie', 2]]) for (let i = 0; i < n; i++) await go(`/go/${code}`);
+  await f.request(member(), 'POST', '/api/account', { displayName: 'C', via: 'x-charlie' });
+  const r = await go('/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ email: 'aldi@example.com', password: PASSWORD }).toString() });
+  const cookie = cookieOf(r);
+  const order = async (query) => {
+    const html = await (await go(`/admin${query}`, { headers: { Cookie: cookie } })).text();
+    const posts = html.split('<h2>Replies</h2>')[0];
+    return { html, names: [...posts.matchAll(/<tr><td>(?:<a [^>]*>)?(Alpha|bravo|Charlie)</g)].map((m) => m[1]) };
+  };
+  const plain = await order('');
+  assert.match(plain.html, /<th><a href="\/admin\?sort=reads&amp;dir=desc">Opened<\/a><\/th>/);
+  assert.doesNotMatch(plain.html, /class="sort"/);
+  const opened = await order('?sort=reads');
+  assert.deepEqual(opened.names, ['bravo', 'Charlie', 'Alpha'], 'largest first');
+  assert.match(opened.html, /<th class="on"><a href="\/admin\?sort=reads&amp;dir=asc">Opened<\/a> <span class="sort">▼<\/span><\/th>/, 'clicking again reverses');
+  assert.deepEqual((await order('?sort=reads&dir=asc')).names, ['Alpha', 'Charlie', 'bravo']);
+  const joined = await order('?sort=accounts');
+  assert.equal(joined.names[0], 'Charlie');
+  assert.deepEqual(joined.names.slice(1), plain.names.filter((n) => n !== 'Charlie'), 'ties keep the default order');
+  assert.deepEqual((await order('?sort=name')).names, ['Alpha', 'bravo', 'Charlie'], 'names A to Z, case ignored');
+  assert.deepEqual((await order('?sort=name&dir=desc')).names, ['Charlie', 'bravo', 'Alpha']);
+  assert.deepEqual((await order('?sort=__proto__')).names, plain.names, 'an unknown column is ignored');
+  assert.match(opened.html, /<tfoot><tr><td>Total<\/td><td>6<\/td><td>1<\/td>/, 'totals unchanged');
+});
