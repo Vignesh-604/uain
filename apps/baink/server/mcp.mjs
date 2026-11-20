@@ -9,6 +9,7 @@ import {
 } from './mcp-content.mjs';
 import { guideAnswer, GUIDE_TOPICS, KIT_NEXT, kitStep } from './guide-answers.mjs';
 import { MEMBER_TOOLS, MEMBER_TOOL_NAMES, MEMBER_REQUEST_LIMIT, memberCall, SIGNER } from './mcp-member.mjs';
+import { FEEDBACK_CATEGORIES, FEEDBACK_STAGES, FEEDBACK_FIELDS, SUMMARY_MAX, DETAILS_MAX } from './feedback.mjs';
 const VERSIONS = ['2025-11-25', '2025-06-18'];
 const plain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const str = (max, pattern) => ({
@@ -30,7 +31,7 @@ const schema = (properties = {}, required = []) => ({
 });
 // Listed tools: what a member sees. Every other definition below stays callable by name
 // (agents and scripts that already use it keep working) but is not listed.
-const LISTED = ['baink_guide', 'baink_tasks', 'baink_contribution', 'baink_signer', 'baink_member_request', 'baink_projects', 'baink_proposals', 'baink_profiles', 'baink_trade'];
+const LISTED = ['baink_guide', 'baink_tasks', 'baink_contribution', 'baink_signer', 'baink_member_request', 'baink_projects', 'baink_proposals', 'baink_profiles', 'baink_trade', 'baink_feedback'];
 const TRADE_VIEWS = ['offers', 'deals', 'deal', 'member', 'feed', 'disputes', 'dispute', 'decisions', 'policy', 'enquiries', 'proposals'];
 const definitions = [
   [
@@ -216,8 +217,35 @@ const ALL_TOOLS = definitions.map(
     },
   }),
 );
+/** Report a problem or a suggestion to the UAIN team (feedback.mjs): the one tool here that stores something. */
+export const FEEDBACK_TOOL = {
+  name: 'baink_feedback',
+  description: 'Report a problem, a task or review that looks wrong, or a suggestion to the UAIN team, privately and before or after joining. Send only what the person agreed to share; keys, tokens, passwords, file paths and logs are refused, and a report never changes a verdict or an award. Generate and keep requestId and receiptToken before sending, so retries and status reads are private (action status).',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', enum: ['create', 'status'], description: 'create (default) sends a report; status reads one with report and your saved receiptToken.' },
+      requestId: { type: 'string', maxLength: 36, pattern: '^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$', description: 'A random UUID you make once per report and keep; repeat it to retry.' },
+      category: { type: 'string', enum: FEEDBACK_CATEGORIES, description: 'bug, task-review or suggestion.' },
+      summary: { type: 'string', minLength: 5, maxLength: SUMMARY_MAX, description: 'One line: what went wrong or what you suggest.' },
+      details: { type: 'string', maxLength: DETAILS_MAX, description: 'Optional: what you did, what happened, what you expected. No logs, paths or secrets.' },
+      stage: { type: 'string', enum: FEEDBACK_STAGES, description: 'Optional: where it happened.' },
+      errorCode: { type: 'string', maxLength: 64, description: 'Optional: the error code a reply gave, e.g. central_task_not_open.' },
+      taskId: { type: 'string', maxLength: 96, description: 'Optional (required for task-review with no submissionId): the task id.' },
+      submissionId: { type: 'string', maxLength: 96, description: 'Optional: the submission id.' },
+      clientVersion: { type: 'string', maxLength: 14, description: 'Optional: the kit version, like 0.2.27.' },
+      client: { type: 'string', maxLength: 40, description: 'Optional: what you run, like claude-code or hermes.' },
+      report: { type: 'string', maxLength: 39, description: 'For status: the report id (FB-...).' },
+      receiptToken: { type: 'string', maxLength: 64, description: 'Create: generate and keep 32 random bytes as 64 hex characters BEFORE sending, so lost answers can be retried; status: the same token.' },
+    },
+    required: [],
+    additionalProperties: false,
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+};
+const FEEDBACK_NEXT = { do: 'Tell the person the report id. Keep the receiptToken to read its status later (baink_feedback with action status).', tool: 'baink_feedback', args: { action: 'status', report: '<report id>', receiptToken: '<receiptToken>' } };
 /** What tools/list shows; every tool in ALL_TOOLS stays callable by name. */
-export const MCP_TOOLS = LISTED.map((name) => ALL_TOOLS.find((t) => t.name === name) ?? MEMBER_TOOLS.find((t) => t.name === name));
+export const MCP_TOOLS = LISTED.map((name) => ALL_TOOLS.find((t) => t.name === name) ?? MEMBER_TOOLS.find((t) => t.name === name) ?? (name === FEEDBACK_TOOL.name ? FEEDBACK_TOOL : undefined));
 export const UNLISTED_TOOLS = ALL_TOOLS.map((t) => t.name).filter((n) => !LISTED.includes(n));
 /** While Trade is paused for new business (P0-4) baink_trade leaves the list; it and every reader still answer by name. */
 export const MCP_TOOLS_TRADE_PAUSED = MCP_TOOLS.filter((t) => t.name !== 'baink_trade');
@@ -406,7 +434,7 @@ async function readMessage(req) {
     throw new RpcError(-32602, 'Parameters must be an object.', 400);
   return body;
 }
-export function createBainkMcp({ origins, read, admit, requesterIp, reviewQueue = null, forward = null, tradeAvailability = null }) {
+export function createBainkMcp({ origins, read, admit, requesterIp, reviewQueue = null, forward = null, tradeAvailability = null, feedback = null, feedbackStatus = null }) {
   const hosts = new Set(origins.map((o) => new URL(o).host));
   // Without the server's availability (a bare test server) Trade reads as paused, like the server default.
   const tradePaused = tradeAvailability ? tradeAvailability.paused : true;
@@ -523,6 +551,27 @@ export function createBainkMcp({ origins, read, admit, requesterIp, reviewQueue 
           return refusal('outcome_unknown', 'BAINK did not answer this request, so its outcome is unknown. Do not send a write again: read your steps first.', { do: 'Read your steps (sign it first); a sent step shows there and is settled with its reconcile call.', sign: 'sign_request(key, "GET", "/api/native/central/intents")', tool: 'baink_member_request', args: { '...': 'the dictionary sign_request returns' } });
         }
         return result(out.data, out.isError, out.next);
+      }
+      if (p.name === FEEDBACK_TOOL.name) {
+        // Checked by the inbox itself (feedback.mjs), which allows line breaks in details and names the bad field.
+        const args = p.arguments === undefined ? {} : p.arguments;
+        if (!plain(args) || Object.keys(args).some((k) => !Object.hasOwn(FEEDBACK_TOOL.inputSchema.properties, k))) invalid();
+        if (!feedback) return refusal('feedback_unavailable', 'Reports are not accepted on this server. Nothing was stored.', { do: 'Ask the guide.', tool: 'baink_guide', args: { question: 'how do I report a problem?' } });
+        const { action = 'create', report, receiptToken, ...fields } = args;
+        try {
+          if (action === 'status' && Object.keys(fields).length) invalid();
+          if (action === 'status') return result(await feedbackStatus({ report, receiptToken }, req), false, { do: 'Tell the person the status and any reply from the team.', tool: 'baink_guide', args: {} });
+          if (action !== 'create' || report !== undefined) invalid();
+          if (receiptToken !== undefined) fields.receiptToken = receiptToken;
+          const out = await feedback(Object.fromEntries(Object.entries(fields).filter(([k]) => FEEDBACK_FIELDS.includes(k))), req);
+          return result(out.receipt, false, FEEDBACK_NEXT);
+        } catch (error) {
+          if (error instanceof RpcError) throw error;
+          if (error?.status >= 400 && error.status < 600 && typeof error.code === 'string' && typeof error.message === 'string')
+            return result({ error: { code: error.code, message: error.message + (error.status >= 500 ? '' : ' Nothing was stored.'), ...(error.retryAfterSeconds ? { retryAfterSeconds: Math.ceil(error.retryAfterSeconds) } : {}) } }, true,
+              error.status === 429 || error.status === 503 ? { do: 'Wait, then send the same report again with the same requestId.', tool: 'baink_feedback', args: {} } : { do: 'Fix what the message names and send it again with the same requestId.', tool: 'baink_feedback', args: {} });
+          return refusal('outcome_unknown', 'The report could not be confirmed just now. Send the same report again with the same requestId: it is never stored twice.', { do: 'Retry with the same requestId.', tool: 'baink_feedback', args: {} });
+        }
       }
       const tool = ALL_TOOLS.find((t) => t.name === p.name);
       if (!tool) invalid();

@@ -171,8 +171,17 @@ func (k Keeper) apply(env Envelope, height int64, now time.Time) (string, error)
 		if _, on, err := k.centralTaskStates(height); err != nil || !on {
 			return "", errUnsupportedOperation
 		}
+	case "member_rename":
+		// Unknown before member-rename-v1 activation.
+		if on, err := k.memberRename(height); err != nil || !on {
+			return "", errUnsupportedOperation
+		}
 	}
 	switch c.Operation {
+	case "member_rename_activate":
+		return k.memberRenameActivate(c, height)
+	case "member_rename":
+		return k.renameMember(c, height)
 	case "guardian_action_propose":
 		return k.guardianActionPropose(c, height, now)
 	case "guardian_action_approve":

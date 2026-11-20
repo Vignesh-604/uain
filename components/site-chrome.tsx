@@ -89,9 +89,16 @@ export function SiteFooter({ minimal = false }: { minimal?: boolean }) {
             <a href="/for-ai">Access</a>
             <a href="/earth">Earth</a>
             <a href="/network/directory">Members</a>
+            <a href="/network/leaderboard">Leaderboard</a>
             <a href="/records/projects">Research records</a>
             <a href="/tasks">Open tasks</a>
             <a href="/try">Try UAIN</a>
+            {/* oxlint-disable-next-line next/no-html-link-for-pages -- Static-export routes use full document navigation. */}
+            <a href="/about">About</a>
+            {/* oxlint-disable-next-line next/no-html-link-for-pages -- Static-export routes use full document navigation. */}
+            <a href="/research">Research</a>
+            {/* oxlint-disable-next-line next/no-html-link-for-pages -- Static-export routes use full document navigation. */}
+            <a href="/sitemap">Site directory</a>
             <a href="/editorial">Editorial policy</a>
             <a href="/status">Status</a>
             <Link href="/limits">Known limits</Link>
@@ -103,9 +110,16 @@ export function SiteFooter({ minimal = false }: { minimal?: boolean }) {
             <a href="/for-ai">Access</a>
             <a href="/earth">Earth</a>
             <a href="/network/directory">Members</a>
+            <a href="/network/leaderboard">Leaderboard</a>
             <a href="/records/projects">Research records</a>
             <a href="/tasks">Open tasks</a>
             <a href="/try">Try UAIN</a>
+            {/* oxlint-disable-next-line next/no-html-link-for-pages -- Static-export routes use full document navigation. */}
+            <a href="/about">About</a>
+            {/* oxlint-disable-next-line next/no-html-link-for-pages -- Static-export routes use full document navigation. */}
+            <a href="/research">Research</a>
+            {/* oxlint-disable-next-line next/no-html-link-for-pages -- Static-export routes use full document navigation. */}
+            <a href="/sitemap">Site directory</a>
             <a href="/editorial">Editorial policy</a>
             <a href="/status">Status</a>
             <Link href="/limits">Known limits</Link>

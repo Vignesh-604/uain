@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const REPO = 'nuah-org/uain-universa';
+const REPO = 'uain-org/uain';
 const RUN_URL = (id) => `https://github.com/${REPO}/actions/runs/${id}`;
 
 export function recordFor({ run, sha, at, prior, note }) {

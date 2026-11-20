@@ -1,0 +1,71 @@
+name: Public source checks
+permissions:
+  contents: read
+concurrency:
+  group: discovery-checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        write-thread:
+        - '0'
+        - '1'
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: uain
+          POSTGRES_PASSWORD: uain-test-only
+          POSTGRES_DB: postgres
+        ports:
+        - 5432:5432
+        options: --memory 2g --cpus 2 --health-cmd "pg_isready -U uain" --health-interval 5s --health-timeout 5s
+          --health-retries 12
+    env:
+      UAIN_TEST_PG: postgres://uain:uain-test-only@127.0.0.1:5432/postgres
+      UAIN_WRITE_THREAD: ${{ matrix.write-thread }}
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        persist-credentials: false
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+    - run: npm ci --ignore-scripts
+    - run: npm --prefix services/pilot ci --ignore-scripts
+    - name: Full backend suite
+      run: npm --prefix services/pilot test
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      with:
+        persist-credentials: false
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+    - run: npm ci --ignore-scripts && npm --prefix services/pilot ci --ignore-scripts && npm run build:pilot
+    - name: Website and discovery checks
+      run: npm run build:web && npx tsc --noEmit -p tsconfig.json && node scripts/check-seo.mjs && node --test scripts/indexnow.test.mjs
+        scripts/discovery-content.test.mjs
+    - name: Discovery deployment and signer contracts
+      run: |
+        node --test ops/ci-scope/classify.test.mjs
+        node --test ops/release/record-uain.test.mjs
+        node --test --test-name-pattern='the signer is served at a stable public address with its checksum' apps/baink/test/mcp-member.test.mjs
+    - name: Actual isolated Nginx routing
+      if: '!cancelled()'
+      run: bash ops/ci/verify-seo-routing.sh "$GITHUB_WORKSPACE"
+'on':
+  push:
+    branches:
+    - main
+  pull_request: {}
+  workflow_dispatch: {}

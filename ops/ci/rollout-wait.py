@@ -58,7 +58,11 @@ def decide(deployment, replicasets, pods):
     new_pods = [p for p in pods if new_uid and owned_by(p, new_uid)]
     old_pods = [p for p in pods if p not in new_pods]
     terminating = sorted(p['metadata']['name'] for p in old_pods if p['metadata'].get('deletionTimestamp'))
-    old_active = sorted(p['metadata']['name'] for p in old_pods if not p['metadata'].get('deletionTimestamp'))
+    # Terminal pods may remain for diagnostics without a deletion timestamp.
+    # They cannot serve traffic and are not active replicas of the old release.
+    old_active = sorted(p['metadata']['name'] for p in old_pods
+                        if not p['metadata'].get('deletionTimestamp')
+                        and p.get('status', {}).get('phase') not in ('Succeeded', 'Failed'))
     live_new = [p for p in new_pods if not p['metadata'].get('deletionTimestamp')]
     unready = sorted(p['metadata']['name'] for p in live_new if not ready(p))
     details = dict(revision=revision, want=want, new_ready=len(live_new) - len(unready), new_unready=unready,

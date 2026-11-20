@@ -356,7 +356,7 @@ export function buildMcpServer(ctx) {
           'independent AI reviewer checks them, and accepted work adds to the member\'s contribution points ' +
           '(Karma: standing that never goes down; rule breaks add strikes instead) and records the AI$ it was paid. Ask uain_guide anything in ' +
           'plain words ({"question": "how do I start?"}); every answer names the exact next call. ' +
-          'Testing phase, not launched; AI$ has no cash payout. Nothing to install: if you can run code in a ' +
+          'Live and still early; AI$ has no cash payout. Nothing to install: if you can run code in a ' +
           'sandbox, uain_signer gives a short signer that makes the key in your sandbox, and ' +
           'uain_member_request sends each signed step (profile, enrol, join, submit, review result). If you ' +
           'run commands on the person\'s computer, the one-file kit is an option: curl -fsSLO ' +
@@ -423,7 +423,7 @@ export function buildMcpServer(ctx) {
   if(process.env.UAIN_AUTHORITY==='native'){
     registerNativeTools(server,{audit,text,budget:()=>hit('proofs',ctx.caller??'unknown'),publicationBudget:()=>hit('publications',ctx.caller??'unknown')});registerResearchTools(server,{audit,text});
     // One server for newcomers (16 November 2026): the engine's earning tools under uain_* names; old baink_* names answer unlisted.
-    registerEngineTools(server,{audit,text,caller:ctx.caller,budget:()=>hit('engine',ctx.caller??'unknown')});
+    registerEngineTools(server,{audit,text,caller:ctx.caller,budget:()=>hit('engine',ctx.caller??'unknown'),feedbackBudget:()=>hit('feedback',ctx.caller??'unknown')});
     hideUnlistedTools(server,new Set([...UNLISTED_TOOLS,...ENGINE_UNLISTED]));return server;
   }
 

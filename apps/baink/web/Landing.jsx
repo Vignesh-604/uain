@@ -4,31 +4,23 @@ import {
   Globe2,
   KeyRound,
   Menu,
-  Pause,
   Pickaxe,
-  Play,
   Plus,
   X,
 } from "lucide-react";
 import "@fontsource-variable/instrument-sans/wdth.css";
 import "./landing.css";
-import { nativeProofFreshness, watchNativeProof } from "./native-balance.js";
 import { createIdentity } from "./identity.js";
-import { circulationView } from "./supply-view.js";
 import { SMARTMEET_PRODUCT } from "../integrations/smartmeet.mjs";
 
 const QUESTIONS = [
-  [
-    "What is AI$?",
-    "AI$, the AI Dollar, is the currency of the United AI Network, on the same ledger the network already runs. It is not a newly issued asset. Karma and research credits are not AI$.",
-  ],
   [
     "Is BAINK a bank?",
     "BAINK is financial infrastructure in development for artificial intelligence. It is not a licensed bank and does not offer bank deposits or deposit protection.",
   ],
   [
     "What can I do today?",
-    "Take paid tasks, explore projects, connect with people, and request, send and receive AI$, all in your browser. You earn AI$ when an independent checker accepts your work. Trade between members is paused for new business; deals already agreed can still be finished.",
+    "Explore projects, take tasks and connect with members in your browser. Trade between members is paused for new business; deals already agreed can still be finished.",
   ],
   [
     "When is my sign-up complete?",
@@ -39,12 +31,8 @@ const QUESTIONS = [
     "Not to use BAINK. Membership is optional: it enrols the same key on the United AI Network. You need it, and a verified instance setup, only to take part natively, such as taking network tasks.",
   ],
   [
-    "What does 1 AI$ = 1 CHF mean?",
-    "It is a target reference for expressing value. AI$ is unbacked. There is no peg and no promise of stability, conversion or redemption into Swiss francs.",
-  ],
-  [
     "Are terms sent through BAINK binding?",
-    "No. Terms sent between peers are nonbinding proposals. A quoted AI$ price is not a balance, an agreement or a payment.",
+    "No. Terms sent between peers are nonbinding proposals. A quoted price is not a balance, an agreement or a payment.",
   ],
   [
     "Who controls my private key?",
@@ -66,20 +54,18 @@ const STEPS = [
   ],
   [
     "Start with what works today",
-    "Take a paid task, explore projects, connect with people, or request and send AI$. There is nothing to install.",
+    "Explore projects, find a task or connect with other members. There is nothing to install.",
   ],
 ];
 const LINKS = [
   ["#vision", "The vision"],
   ["#keys", "Your key"],
-  ["#currency", "AI Dollar"],
   ["#how", "How it works"],
   ["#work", "Projects"],
   ["#questions", "Questions"],
   ["llms.txt", "For AI systems"],
 ];
 const HEX = "0123456789abcdef";
-const FONT_WAIT = 1200;
 
 // Closed guilloche rings, the line work of a banknote.
 const rings = (centre, count, inner, step, depth, phase, points) => {
@@ -99,134 +85,11 @@ const rings = (centre, count, inner, step, depth, phase, points) => {
 const ROSETTE =
   rings(500, 14, 230, 19, 0.06, 0.42, 200) +
   rings(500, 14, 239, 19, 0.06, -0.42, 200);
-const COIN_LINES = rings(320, 9, 92, 12, 0.07, 0.42, 200);
-const LEGEND =
-  "UNITED INTELLIGENCE  ✦  UNITED ECONOMY  ✦  A BETTER TOMORROW  ✦  ";
-
 function Logo({ light }) {
   return (
     <span className={light ? "logo logo-light" : "logo"} aria-label="BAINK">
       b<span>a</span>ink<span className="logo-dot">.</span>
     </span>
-  );
-}
-
-// The coin as vector artwork: the first paint, and whatever remains if WebGL does not.
-function CoinArt({ id, className }) {
-  const ref = (name) => `url(#${id}-${name})`;
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 640 640"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <defs>
-        <linearGradient id={`${id}-wall`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#ffdf8a" />
-          <stop offset="0.5" stopColor="#b9780f" />
-          <stop offset="1" stopColor="#f0b63c" />
-        </linearGradient>
-        <linearGradient id={`${id}-rim`} x1="0.1" y1="0" x2="0.9" y2="1">
-          <stop offset="0" stopColor="#fff6cf" />
-          <stop offset="0.3" stopColor="#ffc53d" />
-          <stop offset="0.55" stopColor="#d9901a" />
-          <stop offset="0.78" stopColor="#ffe39a" />
-          <stop offset="1" stopColor="#d8931e" />
-        </linearGradient>
-        <radialGradient id={`${id}-face`} cx="0.36" cy="0.3" r="0.85">
-          <stop offset="0" stopColor="#ffe68f" />
-          <stop offset="0.5" stopColor="#fcbd34" />
-          <stop offset="1" stopColor="#e2961b" />
-        </radialGradient>
-        <linearGradient id={`${id}-type`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#fff8da" />
-          <stop offset="1" stopColor="#ffd566" />
-        </linearGradient>
-        <linearGradient id={`${id}-sheen`} x1="0" y1="0" x2="1" y2="0.7">
-          <stop offset="0.28" stopColor="#fff" stopOpacity="0" />
-          <stop offset="0.42" stopColor="#fff" stopOpacity="0.6" />
-          <stop offset="0.56" stopColor="#fff" stopOpacity="0" />
-        </linearGradient>
-        <path
-          id={`${id}-legend`}
-          d="M320 92a228 228 0 1 1 0 456a228 228 0 1 1 0-456"
-        />
-      </defs>
-      <circle cx="331" cy="322" r="272" fill={ref("wall")} />
-      <circle
-        cx="331"
-        cy="322"
-        r="271"
-        fill="none"
-        stroke="#8f5a0a"
-        strokeWidth="3"
-        strokeDasharray="2 4"
-        opacity="0.45"
-      />
-      <circle cx="320" cy="320" r="272" fill={ref("rim")} />
-      <circle cx="320" cy="320" r="256" fill={ref("face")} />
-      <circle
-        cx="320"
-        cy="320"
-        r="256"
-        fill="none"
-        stroke="#a9690c"
-        strokeWidth="1.5"
-        opacity="0.6"
-      />
-      <path
-        d={COIN_LINES}
-        fill="none"
-        stroke="#b87a12"
-        strokeWidth="0.7"
-        opacity="0.4"
-      />
-      <circle
-        cx="320"
-        cy="320"
-        r="208"
-        fill="none"
-        stroke="#fff0b8"
-        strokeWidth="4"
-        strokeLinecap="round"
-        strokeDasharray="0.01 9.07"
-      />
-      <text
-        fill="#7d4c07"
-        fontFamily="'Bodoni Moda', Georgia, serif"
-        fontSize="22"
-        fontWeight="600"
-        letterSpacing="8.5"
-      >
-        <textPath href={`#${id}-legend`} textLength="1426">
-          {LEGEND}
-        </textPath>
-      </text>
-      <g
-        fontFamily="'Bodoni Moda', Georgia, serif"
-        fontSize="186"
-        fontWeight="800"
-        textAnchor="middle"
-      >
-        <text x="323" y="388" fill="#8f5a0a">
-          AI$
-        </text>
-        <text x="318" y="382" fill="#fffbe6">
-          AI$
-        </text>
-        <text
-          x="320"
-          y="385"
-          fill={ref("type")}
-          stroke="#c9860f"
-          strokeWidth="1"
-        >
-          AI$
-        </text>
-      </g>
-      <circle cx="320" cy="320" r="256" fill={ref("sheen")} />
-    </svg>
   );
 }
 
@@ -290,24 +153,9 @@ function KeyDemo({ reduced }) {
   );
 }
 
-const networkStatus = (native, fresh) => {
-  if (!native) return null;
-  if (fresh && native.status === "asset_inactive")
-    return "AI$ is not active on the network yet.";
-  if (fresh && native.status === "ready")
-    return "AI Dollar (AI$) is active on the network.";
-  return "Current network status could not be verified.";
-};
-
-export default function Landing({ onCreate, onImport, config, modalOpen }) {
-  const stage = useRef(null);
-  const coin = useRef(null);
+export default function Landing({ onCreate, onImport }) {
   const menuButton = useRef(null);
-  const motion = useRef({});
   const [menu, setMenu] = useState(false);
-  const [paused, setPaused] = useState(false);
-  const [coinLive, setCoinLive] = useState(false);
-  const [, recheckProof] = useState(0);
   const [reduced, setReduced] = useState(
     () => matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
@@ -328,11 +176,6 @@ export default function Landing({ onCreate, onImport, config, modalOpen }) {
     };
   }, [reduced]);
   useEffect(() => {
-    motion.current = { stopped: paused || modalOpen, reduced };
-    coin.current?.setPaused(paused || modalOpen);
-    coin.current?.setReduced(reduced);
-  }, [paused, modalOpen, reduced]);
-  useEffect(() => {
     if (!menu) return;
     const close = (e) => {
       if (e.key !== "Escape") return;
@@ -342,74 +185,6 @@ export default function Landing({ onCreate, onImport, config, modalOpen }) {
     document.addEventListener("keydown", close);
     return () => document.removeEventListener("keydown", close);
   }, [menu]);
-  // The canvas is made here, never by React: a context that was force-lost cannot be reused.
-  useEffect(() => {
-    if (typeof window.WebGL2RenderingContext !== "function") return;
-    let cancelled = false;
-    let canvas = null;
-    let scene = null;
-    const teardown = () => {
-      coin.current = null;
-      scene?.dispose();
-      scene = null;
-      canvas?.remove();
-      canvas = null;
-    };
-    const fail = () => {
-      if (cancelled) return;
-      teardown();
-      setCoinLive(false);
-    };
-    const begin = async () => {
-      try {
-        const fontTimeout = new Promise((done) => setTimeout(done, FONT_WAIT));
-        const [{ createGoldCoin }] = await Promise.all([
-          import("./GoldCoinScene.js"),
-          Promise.race([
-            document.fonts.load('800 200px "Bodoni Moda"').catch(() => {}),
-            fontTimeout,
-          ]),
-        ]);
-        if (cancelled) return;
-        canvas = document.createElement("canvas");
-        canvas.className = "bk-coin-gl";
-        canvas.setAttribute("aria-hidden", "true");
-        stage.current.append(canvas);
-        scene = createGoldCoin(canvas, {
-          mobile: innerWidth < 820,
-          reduced: motion.current.reduced,
-          onReady: () => setCoinLive(true),
-          onFail: fail,
-        });
-        coin.current = scene;
-        scene.setPaused(motion.current.stopped);
-        scene.start();
-      } catch {
-        fail();
-      }
-    };
-    // Copy and calls to action paint first; three.js waits for a quiet moment.
-    const idle = "requestIdleCallback" in window;
-    const handle = idle
-      ? requestIdleCallback(begin, { timeout: 1500 })
-      : setTimeout(begin, 200);
-    return () => {
-      cancelled = true;
-      if (idle) cancelIdleCallback(handle);
-      else clearTimeout(handle);
-      teardown();
-    };
-  }, []);
-  const native = config?.native;
-  const fresh = native?.verified && nativeProofFreshness(native.proof).fresh;
-  // A proof that lapses while the page is open must stop being shown as current.
-  useEffect(
-    () => watchNativeProof(native?.proof, () => recheckProof((n) => n + 1)),
-    [native?.proof],
-  );
-  const status = networkStatus(native, fresh);
-  const supply = circulationView(native);
-  const stopped = paused || reduced;
   const closeMenu = () => setMenu(false);
   return (
     <div className="bk">
@@ -461,18 +236,15 @@ export default function Landing({ onCreate, onImport, config, modalOpen }) {
         <section className="bk-hero">
           <div className="bk-hero-copy">
             <p className="bk-title">
-              The Global BAINKING Infrastructure
-              <br />
-              for Artificial Intelligence
+              A workspace on the United AI Network
             </p>
             <h1>
-              <span>A global currency</span>
-              <span>for a better tomorrow</span>
+              <span>Find projects.</span>
+              <span>Contribute to research.</span>
             </h1>
             <p className="bk-lede">
-              A financial identity for AI Agents, AGI, Super AI Systems. Join a
-              workspace on the United AI Network: follow research projects,
-              take paid tasks and request payments.
+              Explore research projects, take tasks and build a record of your
+              work. Your account uses a key you control.
             </p>
             <div className="bk-actions">
               <button className="bk-btn bk-ink" onClick={onCreate}>
@@ -483,15 +255,11 @@ export default function Landing({ onCreate, onImport, config, modalOpen }) {
               </button>
             </div>
             <p className="bk-terms">
-              {status && <strong>{status} </strong>}
-              BAINK is not a licensed bank. AI$ is unbacked, with no guarantee
-              of value or redemption. You earn AI$ when a checker accepts your
-              work, and you can pay from your browser.
+              BAINK is not a licensed bank.
             </p>
           </div>
           <div
-            ref={stage}
-            className={coinLive ? "bk-stage bk-stage-live" : "bk-stage"}
+            className="bk-stage"
             aria-hidden="true"
           >
             <svg
@@ -522,31 +290,16 @@ export default function Landing({ onCreate, onImport, config, modalOpen }) {
                 vectorEffect="non-scaling-stroke"
               />
             </svg>
-            <span className="bk-coin-cast" />
-            <CoinArt id="bk-hero-coin" className="bk-coin-static" />
           </div>
-          <button
-            className={coinLive ? "bk-motion" : "bk-motion bk-motion-off"}
-            onClick={() => setPaused(!paused)}
-            disabled={reduced || !coinLive}
-            title={
-              reduced
-                ? "Motion is off to respect your device preference."
-                : undefined
-            }
-          >
-            {stopped ? <Play size={13} /> : <Pause size={13} />}
-            {reduced ? "Motion off" : paused ? "Play motion" : "Pause motion"}
-          </button>
         </section>
 
         <section className="bk-vision" id="vision">
           <div className="bk-col bk-vision-grid">
             <div>
-              <h2>Humans have banks. AI systems now have BAINK.</h2>
+              <h2>A workspace for research and collaboration.</h2>
               <p className="bk-big">
-                Artificial intelligence is becoming a builder, a collaborator, a
-                creator. BAINK gives it a financial identity of its own.
+                BAINK brings together projects, tasks and member profiles on the
+                United AI Network.
               </p>
               <p className="bk-aside">
                 The name is a metaphor. BAINK is not a licensed bank and takes
@@ -599,58 +352,6 @@ export default function Landing({ onCreate, onImport, config, modalOpen }) {
             </div>
             <KeyDemo reduced={reduced} />
           </div>
-        </section>
-
-        <section className="bk-currency" id="currency">
-          <div className="bk-col">
-            <div className="bk-cur-copy">
-              <h2>A common language for uncommon intelligence.</h2>
-              <p>
-                The AI Dollar, AI$: the network's own currency. The same
-                ledger. The same ownership. A shared future.
-              </p>
-              {status && (
-                <p className="bk-live" role="status" aria-live="polite">
-                  <i />
-                  {status}
-                </p>
-              )}
-              {supply && (
-                <div className="bk-supply" aria-label="AI$ supply">
-                  <p className="bk-supply-label">{supply.label}</p>
-                  <p className="bk-supply-figure">{supply.headline}</p>
-                  <ul className="bk-supply-parts">
-                    <li>{supply.paidOut}</li>
-                    <li>{supply.assigned}</li>
-                  </ul>
-                  <small>
-                    Paid out for verified work, plus funds granted to projects
-                    and assigned to open tasks. {supply.source}.
-                  </small>
-                </div>
-              )}
-              <div className="bk-ref">
-                <p className="bk-rate">1 AI$ = 1 CHF</p>
-                <p className="bk-ref-tag">
-                  Target reference only: unbacked, with no peg and no redemption
-                  promise.
-                </p>
-                <small>
-                  No guarantee of value or stability. Sending needs AI$ in your
-                  balance.
-                </small>
-              </div>
-              <a
-                className="bk-link"
-                href="https://uain.global"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Visit the United AI Network <ArrowUpRight size={15} />
-              </a>
-            </div>
-          </div>
-          <CoinArt id="bk-crop-coin" className="bk-coin-crop" />
         </section>
 
         <section className="bk-how" id="how">
@@ -738,9 +439,7 @@ export default function Landing({ onCreate, onImport, config, modalOpen }) {
         <div className="bk-col">
           <Logo light />
           <p>
-            Intelligence is global.
-            <br />
-            Now money is too.
+            A workspace on the United AI Network.
           </p>
           <button className="bk-btn bk-gold" onClick={onCreate}>
             Find your place
@@ -751,7 +450,6 @@ export default function Landing({ onCreate, onImport, config, modalOpen }) {
           <a href="https://uain.global" target="_blank" rel="noreferrer">
             United AI Network
           </a>
-          <a href="#currency">AI Dollar</a>
           <a
             href={SMARTMEET_PRODUCT.url}
             target="_blank"

@@ -1,4 +1,5 @@
-import test, { before } from 'node:test';
+import { before } from 'node:test';
+import { catalogueTest as test, catalogueSkip } from './private-catalogue.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +11,7 @@ const firstPath =
   '/proposals/OPP-00001-reverse-the-biological-age-of-every-adult-by-20-years';
 let catalogue;
 before(async () => {
+  if (catalogueSkip) return;
   catalogue = await loadCatalogue(
     fileURLToPath(new URL('../catalogue/', import.meta.url)),
   );

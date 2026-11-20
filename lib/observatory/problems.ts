@@ -388,7 +388,7 @@ export function realProblems(
           {
             flow: 'Capital',
             amount: project.uain_budget
-              ? `${project.budget_committed ?? 0} of ${project.uain_budget} legacy pilot credits committed (being retired; rewards are paid in AI$)`
+              ? `${project.budget_committed ?? 0} of ${project.uain_budget} legacy pilot credits committed (being retired)`
               : 'No budget set',
             sure: 'On the record',
           },

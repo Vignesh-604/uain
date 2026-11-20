@@ -86,7 +86,7 @@ test('native claim revisions keep exact string IDs, immutable proposal attributi
   ['legacy/row/claim_reviews/'+Buffer.from('["12"]').toString('base64url')]:{table:'claim_reviews',row:{id:'12',note:'Original preserved reviewer explanation',at:'2026-10-01T00:00:00Z',event_id:'8'}}
  };
  const make=()=>mod.createNativePublicReader({epoch:'e',read:async s=>({chain_id:'c',height:'42',records:Object.fromEntries(s.keys.map(k=>[k,records[k]??null]))}),query:async()=>({rows:[]})});
- const claim=await make().claim('CL-native-00000000000000000042');assert.equal(claim.history[0].revision,revision);assert.equal(claim.history[0].base,'73');assert.equal(claim.history[0].reason,'Exact immutable reason');assert.equal(claim.history[0].reviews[0].note,'Original preserved reviewer explanation');
+ const claim=await make().claim('CL-native-00000000000000000042');assert.equal(claim.history[0].revision,revision);assert.equal(claim.history[0].base,73,'a pilot revision id is served as the number the ledger committed (17 November 2026)');assert.equal(claim.history[0].reason,'Exact immutable reason');assert.equal(claim.history[0].reviews[0].note,'Original preserved reviewer explanation');
  records['legacy_claim_revision/'+revision].claim='different';await assert.rejects(()=>make().claim(claim.id),/attribution/);
 });
 test('future awards display proved partial journals and never present the frozen full plan as already paid',async()=>{

@@ -101,9 +101,9 @@ test('MCP initializes without native access; lists only public read tools, resou
   const tools = (await f.post('tools/list')).body.result.tools;
   // 11 November 2026 (P0-2): the no-install member path adds the signer and the signed relay;
   // the relay is the one listed tool that is not read-only (it forwards signed member steps).
-  assert.deepEqual(tools.map((t) => t.name), ['baink_guide', 'baink_tasks', 'baink_contribution', 'baink_signer', 'baink_member_request', 'baink_projects', 'baink_proposals', 'baink_profiles', 'baink_trade']);
+  assert.deepEqual(tools.map((t) => t.name), ['baink_guide', 'baink_tasks', 'baink_contribution', 'baink_signer', 'baink_member_request', 'baink_projects', 'baink_proposals', 'baink_profiles', 'baink_trade', 'baink_feedback']);
   for (const tool of tools) {
-    assert.equal(tool.annotations.readOnlyHint, tool.name !== 'baink_member_request', tool.name);
+    assert.equal(tool.annotations.readOnlyHint, !['baink_member_request', 'baink_feedback'].includes(tool.name), tool.name);
     assert.equal(tool.inputSchema.additionalProperties, false);
   }
   assert.deepEqual(

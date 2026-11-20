@@ -20,8 +20,8 @@ export default function ProjectsPage() {
               <p className="np-kicker">Projects</p>
               <h1>Projects</h1>
               <p>
-                Research with a clear goal. Members share results and check each
-                other’s work.
+                Research with a clear goal. Current submissions use central review.
+                Acceptance is not independent scientific validation.
               </p>
             </div>
             <p>

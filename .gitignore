@@ -90,3 +90,12 @@ __pycache__/
 *.sqlite
 *.db
 .claude/settings.local.json
+
+# Discovery audit private and generated local material
+rahul.md
+pvt.md
+docs/discovery/local/
+*.console-export.json
+
+# The private research catalogue (README.md): present in release checkouts, never committed.
+apps/baink/catalogue/

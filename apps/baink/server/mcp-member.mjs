@@ -35,6 +35,8 @@ const ALLOWED = [
   ['GET', '/api/config'],
   ['GET', '/api/account'],
   ['POST', '/api/account'],
+  ['POST', '/api/feedback'],
+  ['GET', '/api/feedback'],
   ['GET', '/api/native/enrol'],
   ['POST', '/api/native/enrol/prepare'],
   ['POST', `/api/native/enrol/${UUID}/(?:submit|receipt)`],

@@ -1,5 +1,6 @@
 // First: it may stop the server before the store below connects (audit E-7).
 import './authority-guard.ts';
+import { sitemapIndex, sitemapLeaf, taskPagePolicy, taskListingComplete } from './discovery-sitemaps.ts';
 import { readJsonBody as readBody } from './http-body.ts';
 import { publicRecordResponse } from './public-record-pages.ts';
 import { framedDocument, longDay, noticeDocument, pageHead, RECORD_PAGE_CSP, wantsPage } from './record-frame.ts';
@@ -467,6 +468,14 @@ async function handleTaskDiscovery(req, res, url) {
       })),
     }, { 'cache-control': 'public, max-age=60' });
   }
+  if (path === '/sitemap-index.xml') {
+    const result = await find({ status: 'sitemap', pageSize: 1 });
+    const records = await publicRecordResponse(new URL('/records/sitemap.xml', DISCOVERY_ORIGIN), nativePublicData);
+    if (!records || records.status !== 200) return sendDiscovery(res, 503, 'Catalogue unavailable', 'text/plain', { 'retry-after': '60' });
+    const recordCount = (records.body.match(/<url>/g) ?? []).length;
+    const recordLeaves = (records.body.match(/<sitemap>/g) ?? []).length;
+    return sendDiscovery(res, 200, sitemapIndex(result.count, recordLeaves ? recordLeaves * 50000 : recordCount), 'application/xml');
+  }
   if (path === '/tasks/sitemap.xml') {
     const result = await find({ status: 'sitemap', pageSize: 1 });
     const pages = Math.max(1, Math.ceil(result.count / 200));
@@ -484,19 +493,17 @@ async function handleTaskDiscovery(req, res, url) {
     const result = await find({ status: 'sitemap', page: requestedPage, pageSize: 200 });
     if (result.page > result.pages)
       return sendDiscovery(res, 404, 'Not found', 'text/plain');
-    const entries = result.count === 0
-      ? `<url><loc>${DISCOVERY_ORIGIN}/tasks</loc></url>`
-      : result.tasks.map((task) =>
-      `<url><loc>${DISCOVERY_ORIGIN}${task.url}</loc></url>`).join('');
-    return sendDiscovery(res, 200,
-      `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${entries}</urlset>`,
-      'application/xml');
+    return sendDiscovery(res, 200, sitemapLeaf(result.count === 0 ? ['/tasks'] : result.tasks.map(task => task.url)), 'application/xml');
   }
   if (path === '/tasks') {
+    if (q.length > 200 || (page !== undefined && (!/^[1-9][0-9]{0,5}$/.test(page) || Number(page) > 100000))) return sendDiscovery(res, 400, 'Invalid bounded task query', 'text/plain');
     // Tabs by state (16 November 2026): open, answered, under review and closed, each with its
     // count from the same read. Before, the page listed only open tasks and ignored ?status.
     const tab = (TASK_TAB_WORDS as Record<string, unknown>)[status] ? status : 'open';
     const result = await find({ q, status: tab, page, pageSize: 20 });
+    if (!taskListingComplete(result)) return sendDiscovery(res, 503, noticeDocument({title:'The task catalogue is temporarily incomplete',message:'Current task availability cannot be established. Please try again in a minute; unavailable data does not mean zero activity.',section:'tasks',links:[['/status','Service status']]}), 'text/html', {'retry-after':'60'});
+    if (result.page > result.pages) return sendDiscovery(res, 404, 'Not found', 'text/plain');
+    const policy = taskPagePolicy(url, result.page);
     const words = TASK_TAB_WORDS[tab as keyof typeof TASK_TAB_WORDS];
     const answered = tab === 'answered' ? await answeredBy(result.tasks) : new Map();
     const cards = result.tasks.map((task) => {
@@ -536,7 +543,7 @@ ${tabs}
 <form class="record-search" action="/tasks" method="get" role="search">${tab !== 'open' ? `<input type="hidden" name="status" value="${esc(tab)}">` : ''}<label class="net-field" for="task-search"><span>Search ${esc(words.tab.toLowerCase())} tasks</span><input class="net-input" id="task-search" name="q" value="${esc(q)}"></label><button type="submit">Search</button></form>
 <p class="record-count">${result.count} ${esc(words.noun)} task${result.count === 1 ? '' : 's'}${q ? ` matching “${esc(q)}”` : ''}${result.pages > 1 ? ` · page ${result.page} of ${result.pages}` : ''}.</p><div class="record-stack">${cards || `<section class="record-card"><p>${esc(words.empty)}</p></section>`}</div>
 ${previous || next ? `<nav class="record-pager" aria-label="Task pages">${previous}${next}</nav>` : ''}<p class="record-meta"><a href="/tasks/feed.json${tab !== 'open' ? `?status=${esc(tab)}` : ''}">The same list for programs (JSON)</a></p>`;
-    return sendDiscovery(res, 200, discoveryPage(words.title, words.description, tab === 'open' ? '/tasks' : `/tasks?status=${tab}`, body, null, tab !== 'open'), 'text/html');
+    return sendDiscovery(res, 200, discoveryPage(words.title, words.description, policy.canonical, body, null, policy.noindex), 'text/html');
   }
   const match = path.match(/^\/tasks\/([A-Za-z0-9][A-Za-z0-9._:-]{0,255})$/);
   if (!match) return false;
@@ -1982,13 +1989,14 @@ async function handle(req, res) {
     }
   }
 
-  if (url.pathname === '/tasks' || url.pathname.startsWith('/tasks/')) {
+  if (url.pathname === '/sitemap-index.xml' || url.pathname === '/tasks' || url.pathname.startsWith('/tasks/')) {
     try {
       const served = await handleTaskDiscovery(req, res, url);
       if (served !== false) return;
     } catch (e) {
       // The feed and sitemaps stay JSON and XML for programs; a page gets a page.
-      if (res.headersSent || /\.(json|xml)$/.test(url.pathname)) throw e;
+      if (res.headersSent) throw e;
+      if (/\.(json|xml)$/.test(url.pathname)) return send(res, 503, {error:'discovery_unavailable'}, {'retry-after':'60'});
       log({ channel: 'http', action: `${req.method} ${url.pathname}`, caller, status: 503, detail: String(e?.message ?? e).slice(0, 200) });
       return sendDiscovery(res, 503, noticeDocument({
         title: 'The tasks cannot be read right now',

@@ -1,3 +1,4 @@
+import { sitemapLeaf } from './discovery-sitemaps.ts';
 /** Crawlable public records. Reads use the same verified authority as the API;
  * never cache a stale or fabricated record when that authority is unavailable.
  * Since 10 November 2026 they are drawn in the site's own frame (record-frame.ts). */
@@ -265,7 +266,8 @@ export async function publicRecordResponse(
     new RegExp(`^/network/(projects|directory)/([^/]+)$`),
   );
   const catalog = url.pathname.match(/^\/records\/(projects|members)$/);
-  const sitemap = url.pathname === '/records/sitemap.xml';
+  const shard = url.pathname.match(/^\/records\/sitemap-([1-9][0-9]*)\.xml$/);
+  const sitemap = url.pathname === '/records/sitemap.xml' || !!shard;
   if (!detail && !catalog && !sitemap) return null;
   const section: FrameSection =
     (detail?.[1] ?? catalog?.[1]) === 'projects' ? 'projects' : 'members';
@@ -288,13 +290,19 @@ export async function publicRecordResponse(
           if (n === 1000) throw Error('catalogue exceeds sitemap bound');
         }
       }
+      const unique = [...new Set(urls)];
+      const shardNumber = shard ? Number(shard[1]) : null;
+      const shardCount = Math.ceil(unique.length / 50000);
+      if (shardNumber !== null && (!Number.isSafeInteger(shardNumber) || shardNumber > shardCount)) return {status:404,headers:{'content-type':'text/plain'},body:'Not found'};
       return {
         status: 200,
         headers: {
           'content-type': 'application/xml; charset=utf-8',
           'cache-control': 'public, max-age=0, must-revalidate',
         },
-        body: `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${[...new Set(urls)].map((p) => `<url><loc>${esc(origin + p)}</loc></url>`).join('')}</urlset>`,
+        body: shardNumber === null && unique.length > 50000
+          ? '<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + Array.from({length:shardCount},(_,i)=>'<sitemap><loc>https://uain.global/records/sitemap-'+(i+1)+'.xml</loc></sitemap>').join('') + '</sitemapindex>'
+          : sitemapLeaf(shardNumber === null ? unique : unique.slice((shardNumber-1)*50000,shardNumber*50000)),
       };
     }
     if (catalog) {
@@ -421,6 +429,27 @@ export async function publicRecordResponse(
         (verified.length ? `<section class="record-card" id="reviews"><h2>Checks of other members’ work</h2>${workList(verified, '')}</section>` : '') +
         `<section class="record-card"><p>${address.startsWith('uain1') ? `<a href="/network/live?member=${esc(encodeURIComponent(address))}">Member account and standing</a> · ` : ''}<a href="/network/live?id=${idPath(id)}">Interactive agent record</a> · <a href="${apiPath}">Machine-readable record</a></p>${height}</section>` +
         `</div>`;
+    }
+    // Resolve only same-authority project identities. Missing/hidden references remain historical text.
+    const references = [...new Set([...content.matchAll(/href="(\/network\/projects\/[^"?#]+)"/g)].map(m=>m[1]))];
+    const checked = await Promise.all(references.map(async (href,index) => {
+      let available = false, timer: ReturnType<typeof setTimeout> | undefined;
+      if(index < 12) { try {
+        const ref = decodeURIComponent(href.slice('/network/projects/'.length));
+        if (/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(ref)) {
+          const found = await Promise.race([
+            read(new URL('/api/projects/'+encodeURIComponent(ref),origin)).catch(()=>null),
+            new Promise<null>(resolve=>{timer=setTimeout(()=>resolve(null),2500);}),
+          ]);
+          available = found?.status === 200 && found.body?.id === ref;
+        }
+      } catch { /* An unreadable record is not proof that it was deleted. */ }
+      finally { if(timer)clearTimeout(timer); } }
+      return {href,available};
+    }));
+    for(const {href,available} of checked) if(!available) {
+      const escapedHref = href.replace(/[.*+?^$'+'{}()|[\]\\]/g,'\\$&');
+      content = content.replaceAll(new RegExp('<a href="'+escapedHref+'">([^<]*)</a>','g'), '$1 <span class="record-meta">Historical project reference unavailable — <a href="/records/projects">browse public projects</a></span>');
     }
     return page(
       200,

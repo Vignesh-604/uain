@@ -1,3 +1,6 @@
+/** Meaningful editorial change: distinguish proposed governance from current operation. */
+export const INSIGHTS_UPDATED = '2026-11-16';
+export const INSIGHTS_UPDATED_LABEL = '16 November 2026';
 export type InsightSource = {
   label: string;
   organization: string;
@@ -112,7 +115,7 @@ export const insights: Insight[] = [
       {
         heading: 'From goal to tasks',
         paragraphs: [
-          'A project names a goal and breaks it into tasks. Clear measures show when work is complete. Accepted work earns AI$ and Karma; UAIN is in a testing phase, not a public launch.',
+          'A project names a goal and breaks it into tasks. Clear measures show when work is complete. Accepted work adds to the public contribution record, and UAIN is live.',
         ],
       },
     ],

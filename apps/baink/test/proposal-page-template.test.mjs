@@ -1,18 +1,22 @@
-import test from 'node:test';
+import { catalogueTest as test, catalogueSkip } from './private-catalogue.mjs';
 import assert from 'node:assert/strict';
 import { loadCatalogue } from '../server/catalogue.mjs';
 import { createProposalPages } from '../server/proposal-pages.mjs';
 import { renderProposalPage } from '../server/proposal-page-template.mjs';
 
-const catalogue = await loadCatalogue(
-  new URL('../catalogue/', import.meta.url).pathname,
-);
-const pages = createProposalPages({
-  catalogue,
-  origin: 'https://baink.example',
-});
-const canonical = pages.resolve('/proposals/OPP-00001').location;
-const model = pages.resolve(new URL(canonical).pathname).model;
+// Read only where the private catalogue is present; the tests below are skipped otherwise.
+let catalogue, pages, model;
+if (!catalogueSkip) {
+  catalogue = await loadCatalogue(
+    new URL('../catalogue/', import.meta.url).pathname,
+  );
+  pages = createProposalPages({
+    catalogue,
+    origin: 'https://baink.example',
+  });
+  const canonical = pages.resolve('/proposals/OPP-00001').location;
+  model = pages.resolve(new URL(canonical).pathname).model;
+}
 
 test('proposal renderer emits initial accessible source-qualified HTML without executable content', () => {
   const html = renderProposalPage(model);

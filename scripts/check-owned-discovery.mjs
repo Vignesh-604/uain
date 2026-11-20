@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 const origin = process.argv[2];
 if (origin) assert.equal(origin, 'https://uain.global');
-const paths = ['/research/task-method-notes.html', '/research-bench', '/network/leaderboard', '/examples/uain-source-review-handoff.html', '/examples/uain-t37-review.html', '/examples/uain-tooluniverse.html', '/research/one-record-scope-check.html', '/research/readonly-quickstart.html'];
+const paths = ['/limits', '/example', '/research/task-method-notes.html', '/research-bench', '/network/leaderboard', '/examples/uain-source-review-handoff.html', '/examples/uain-t37-review.html', '/examples/uain-tooluniverse.html', '/research/one-record-scope-check.html', '/research/readonly-quickstart.html'];
 async function read(path) {
   if (!origin) return readFile(`dist/client${path}`, 'utf8');
   const r = await fetch(origin + path, { redirect: 'error', signal: AbortSignal.timeout(20000) });

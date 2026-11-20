@@ -5,6 +5,10 @@
 // Read-only and unsigned. A bounded shared snapshot covers every open task;
 // search and cursor paging only filter that in-memory snapshot.
 const TASKS = 12;
+// Snapshot timing (19 November 2026, with about 600 central tasks): refresh after two minutes
+// (was one), keep serving the last good snapshot for ten (was five), and allow a scan three
+// minutes (was 90 seconds) now that it reads one page at a time.
+const PAGE = 31, FRESH_MS = 120_000, STALE_MS = 600_000, SCAN_MS = 180_000;
 const units = (v) => { const s = String(v).padStart(7, '0'); return `${s.slice(0, -6)}.${s.slice(-6)}`.replace(/\.?0+$/, '') || '0'; };
 const SURVEY = /^T-OPP-[0-9]{5}-1-prior-art-survey(-r[2-9]-p[1-9][0-9]?)?$/;
 const KIT = 'curl -fsSLO https://baink.money/uain-agent.mjs';
@@ -35,18 +39,18 @@ export function createPublicTasks({ centralEarning = null, catalogue = null, now
   const unavailable = (warming = false) => ({ status: 'unavailable', ...(warming ? { warming: true, retryAfterSeconds: 10 } : {}), tasks: [], note: warming ? 'The complete task index is warming. Retry in 10 seconds; no total is available yet. This does not mean no tasks are open.' : UNREADABLE, howToTake: HOW });
   async function load() {
     // Index-order offsets remain stable when new tasks are appended. Read at most
-    // 4096 records, two bounded proved pages at a time, instead of rescanning open
-    // windows sequentially. The native reader still validates every page proof.
-    const signal = AbortSignal.timeout(90_000);
-    const pageAt = cursor => centralEarning.tasks(null, { cursor: String(cursor), limit: 48, order: 'index', state: 'all' }, { public: true, signal });
+    // 4096 records in bounded proved pages. The native reader still validates every page proof.
+    // One page at a time (19 November 2026): the remote proof reader has two slots, and two
+    // pages in flight every minute held both, so members' own reads waited, timed out or were
+    // refused. A 31-task page is two proved reads (the count and index share the first).
+    const signal = AbortSignal.timeout(SCAN_MS);
+    const pageAt = cursor => centralEarning.tasks(null, { cursor: String(cursor), limit: PAGE, order: 'index', state: 'all' }, { public: true, signal });
     const valid = page => { if (page?.authority !== 'native' || page.verified !== true || !Array.isArray(page.tasks)) throw Error('Unproved task list'); return page; };
     const first = valid(await pageAt(0));
     const total = Number(first.total);
     if (!Number.isSafeInteger(total) || total < 0 || total > 4096) throw Error('Task list exceeds the bounded scan; total is unknown');
     const pages = [first];
-    for (let offset = 48; offset < total; offset += 96) {
-      pages.push(...(await Promise.all([offset, offset + 48].filter(n => n < total).map(pageAt))).map(valid));
-    }
+    for (let offset = PAGE; offset < total; offset += PAGE) pages.push(valid(await pageAt(offset)));
     let rows = pages.flatMap(page => page.tasks).reverse().filter(t => t.claimable === true), heights = pages.map(p => p.proof?.height).filter(Boolean);
     if (pages.reduce((n, page) => n + page.tasks.length, 0) < total) throw Error('Incomplete task index');
     const seen = new Set();
@@ -65,13 +69,13 @@ export function createPublicTasks({ centralEarning = null, catalogue = null, now
         throw Object.assign(Error('Use q up to 100 characters, project up to 96, a numeric cursor and limit 1 to 50.'), { status: 400, code: 'invalid_query' });
       if (typeof centralEarning?.tasks !== 'function') return unavailable();
       signal?.throwIfAborted();
-      if (!snapshot || now() - snapshot.at >= 60_000) {
+      if (!snapshot || now() - snapshot.at >= FRESH_MS) {
         if (!flight && now() >= retryAt) {
           flight = load().then(value => { snapshot = value; return value; }).catch(error => { retryAt = now() + 30_000; throw error; }).finally(() => { flight = null; });
           flight.catch(() => {});
         }
-        // A previous snapshot stays available for at most five minutes while it refreshes.
-        if (!snapshot || now() - snapshot.at > 300_000) {
+        // A previous snapshot stays available for at most ten minutes while it refreshes.
+        if (!snapshot || now() - snapshot.at > STALE_MS) {
           try { if (!flight) return unavailable(); let timer; try { await Promise.race([flight, new Promise((_, reject) => { timer = setTimeout(() => reject(Object.assign(Error('Task index warming'), { code: 'index_warming' })), 7500); timer.unref?.(); })]); } finally { clearTimeout(timer); } } catch (error) { return unavailable(error?.code === 'index_warming'); }
         }
       }

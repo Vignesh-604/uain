@@ -62,6 +62,16 @@ class DecideTest(unittest.TestCase):
         self.assertEqual(state, 'wait')
         self.assertIn('old-a', message)
 
+    def test_terminal_old_pods_do_not_block_ready_replicas(self):
+        for phase in ('Succeeded', 'Failed'):
+            with self.subTest(phase=phase):
+                finished = pod('old-finished', 'old', is_ready=False)
+                finished['status']['phase'] = phase
+                state, _, details = w.decide(deployment(), SETS,
+                    [pod('new-a', 'new'), pod('new-b', 'new'), finished])
+                self.assertEqual(state, 'done')
+                self.assertEqual(details['old_active'], [])
+
     def test_too_few_updated_replicas_waits(self):
         state, message, _ = w.decide(deployment(updated=1, available=1), SETS, [pod('new-a', 'new'), pod('old-a', 'old')])
         self.assertEqual((state, message), ('wait', '1 of 2 replicas updated'))

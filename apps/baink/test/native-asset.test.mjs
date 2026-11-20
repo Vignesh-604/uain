@@ -260,9 +260,9 @@ test('a third concurrent native proof waits for a slot while actual process conc
 });
 test('native proof waiting capacity is bounded and a full queue does not spawn another reader',async t=>{
  const who=identity(),f=await adapterFixture(t,who,snapshot(who),{timeoutMs:3000},{delayMs:100,trace:true});
- const admitted=Array.from({length:6},()=>f.adapter.publicState({keys:[]}));
+ const admitted=Array.from({length:10},()=>f.adapter.publicState({keys:[]}));
  await assert.rejects(f.adapter.publicState({keys:[]}),/capacity/);await Promise.all(admitted);
- const events=(await readFile(f.trace,'utf8')).trim().split('\n').map(JSON.parse);assert.equal(events.filter(e=>e.event==='start').length,6);let active=0;for(const e of events){active+=e.event==='start'?1:-1;assert.ok(active<=2&&active>=0);}assert.equal(active,0);
+ const events=(await readFile(f.trace,'utf8')).trim().split('\n').map(JSON.parse);assert.equal(events.filter(e=>e.event==="start").length,10);let active=0;for(const e of events){active+=e.event==='start'?1:-1;assert.ok(active<=2&&active>=0);}assert.equal(active,0);
 });
 test('a queued proof retains its original deadline, is removed on timeout and cannot leak reader capacity',async t=>{
  const who=identity(),f=await adapterFixture(t,who,snapshot(who),{timeoutMs:2000},{delayMs:140,trace:true});

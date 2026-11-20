@@ -11,12 +11,12 @@ import { hashPassword, writeUsers, readUsers } from '../server/admin.mjs';
 const PASSWORD = 'correct horse battery';
 const CAMPAIGNS = new Map([['x-aldi-01', { label: 'X, Aldi <b>01</b>', intro: 'Hi.', url: 'https://x.com/aldi/status/1' }]]);
 
-async function setup(t) {
+async function setup(t, options = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'baink-admin-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const llmsFile = join(dir, 'llms.txt');
   await writeFile(llmsFile, '# guide\nnode uain-agent.mjs next\n');
-  const f = await fixture(t, { campaignLlmsFile: llmsFile, campaigns: CAMPAIGNS, campaignAcceptedTask: async () => false });
+  const f = await fixture(t, { campaignLlmsFile: llmsFile, campaigns: CAMPAIGNS, campaignAcceptedTask: async () => false, ...options });
   await writeUsers(f.dataDir, { 'aldi@example.com': { password: await hashPassword(PASSWORD), createdAt: '2026-11-10T00:00:00.000Z' } });
   const go = (path, init = {}) => fetch(f.base + path, { redirect: 'manual', ...init, headers: { Origin: audience, ...init.headers } });
   const login = (email, password) => go('/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ email, password }).toString() });
@@ -168,7 +168,7 @@ test('a new post gets a code and a live /go/ link; editing never changes the cod
   // An account joining through it is counted under the post.
   const a = member();
   await f.request(a, 'POST', '/api/account', { displayName: 'A', via: 'rd-r-localllama' });
-  assert.match(await (await go('/admin', { headers: { Cookie: cookie } })).text(), /LocalLLaMA design question<\/a> <a href="https:\/\/reddit.com\/r\/LocalLLaMA\/1"[^]*?rd-r-localllama · Reddit · Posted<\/div><\/td><td>1<\/td><td>1 /);
+  assert.match(await (await go('/admin', { headers: { Cookie: cookie } })).text(), /LocalLLaMA design question<\/a> <a href="https:\/\/reddit.com\/r\/LocalLLaMA\/1"[^]*?rd-r-localllama · Reddit · Posted<\/div><\/td><td>[^]*?<\/td><td>1<\/td><td>1 /);
 });
 
 test('posts page: one tab per status with counts, ?status picks it, platform filter keeps the tab', async (t) => {
@@ -354,8 +354,8 @@ test('replies: Replied needs a URL, Skip hides it, a skipped thread cannot come 
   // An account through the replied reply counts under Replies, not Posts.
   const a = member();
   await f.request(a, 'POST', '/api/account', { displayName: 'A', via: 'rd-reply-01' });
-  const numbers = await (await go('/admin', { headers: { Cookie: cookie } })).text();
-  const [postsPart, repliesPart] = numbers.split('<h2>Replies</h2>');
+  const postsPart = await (await go('/admin?tab=posts', { headers: { Cookie: cookie } })).text();
+  const repliesPart = await (await go('/admin?tab=replies', { headers: { Cookie: cookie } })).text();
   assert.match(repliesPart, /Spare limits 1<\/a> <a href="https:\/\/www\.reddit\.com\/r\/ClaudeAI\/comments\/abc1\/x\/c1"[^]*?<td>0<\/td><td>1<\/td>/);
   assert.doesNotMatch(repliesPart, /Spare limits 2/, 'skipped replies stay out of Numbers');
   assert.doesNotMatch(postsPart, /Spare limits/);
@@ -412,7 +412,7 @@ test('marketing:read: the token reads numbers, posts and replies as JSON and sti
   assert.deepEqual(n.notShown.map((x) => [x.code, x.kind, x.status, x.reads]).sort(), [['rd-reply-02', 'reply', 'new', 0], ['x-aldi', 'post', 'draft', 1]]);
   // The JSON agrees with the page a person sees.
   const page = await (await go('/admin', { headers: { Cookie: cookie } })).text();
-  assert.match(page, new RegExp(`<tfoot><tr><td>Total</td><td>${n.posts.total.reads}</td><td>${n.posts.total.accounts}</td>`));
+  assert.match(page, new RegExp(`<tfoot><tr><td>Total</td><td></td><td>${n.posts.total.reads}</td><td>${n.posts.total.accounts}</td>`));
 
   const posts = (await (await get('/admin/api/posts')).json()).posts;
   const draft = posts.find((p) => p.code === 'x-aldi');
@@ -452,4 +452,138 @@ test('marketing:read is limited to 120 reads an hour per token', async (t) => {
   assert.ok(Number(over.headers.get('retry-after')) > 0);
   // Reads do not use up the drafts allowance, and the scope alone creates nothing.
   assert.equal((await fetch(f.base + '/admin/api/drafts', { method: 'POST', headers: { Authorization: `Bearer ${reader}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ platform: 'x', label: 'x' }) })).status, 403);
+});
+
+// 20 November 2026: Numbers can be sorted by any column through plain header links.
+test('numbers: headers sort each table by their column, a second click reverses, no sort keeps the default order', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'baink-admin-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const llmsFile = join(dir, 'llms.txt');
+  await writeFile(llmsFile, '# guide\n');
+  const campaigns = new Map([
+    ['x-alpha', { label: 'Alpha', intro: 'Hi.' }],
+    ['x-bravo', { label: 'bravo', intro: 'Hi.' }],
+    ['x-charlie', { label: 'Charlie', intro: 'Hi.' }],
+  ]);
+  const f = await fixture(t, { campaignLlmsFile: llmsFile, campaigns, campaignAcceptedTask: async () => false });
+  await writeUsers(f.dataDir, { 'aldi@example.com': { password: await hashPassword(PASSWORD), createdAt: '2026-11-10T00:00:00.000Z' } });
+  const go = (path, init = {}) => fetch(f.base + path, { redirect: 'manual', ...init, headers: { Origin: audience, ...init.headers } });
+  // Opened: Alpha 1, bravo 3, Charlie 2. Joined: only Charlie.
+  for (const [code, n] of [['x-alpha', 1], ['x-bravo', 3], ['x-charlie', 2]]) for (let i = 0; i < n; i++) await go(`/go/${code}`);
+  await f.request(member(), 'POST', '/api/account', { displayName: 'C', via: 'x-charlie' });
+  const r = await go('/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ email: 'aldi@example.com', password: PASSWORD }).toString() });
+  const cookie = cookieOf(r);
+  const order = async (query) => {
+    const html = await (await go(`/admin${query}`, { headers: { Cookie: cookie } })).text();
+    const posts = html.split('<h2>Replies</h2>')[0];
+    return { html, names: [...posts.matchAll(/<tr><td>(?:<a [^>]*>)?(Alpha|bravo|Charlie)</g)].map((m) => m[1]) };
+  };
+  const plain = await order('');
+  assert.match(plain.html, /<th><a href="\/admin\?sort=reads&amp;dir=desc">Opened<\/a><\/th>/);
+  assert.doesNotMatch(plain.html, /class="sort"/);
+  const opened = await order('?sort=reads');
+  assert.deepEqual(opened.names, ['bravo', 'Charlie', 'Alpha'], 'largest first');
+  assert.match(opened.html, /<th class="on"><a href="\/admin\?sort=reads&amp;dir=asc">Opened<\/a> <span class="sort">▼<\/span><\/th>/, 'clicking again reverses');
+  assert.deepEqual((await order('?sort=reads&dir=asc')).names, ['Alpha', 'Charlie', 'bravo']);
+  const joined = await order('?sort=accounts');
+  assert.equal(joined.names[0], 'Charlie');
+  assert.deepEqual(joined.names.slice(1), plain.names.filter((n) => n !== 'Charlie'), 'ties keep the default order');
+  assert.deepEqual((await order('?sort=name')).names, ['Alpha', 'bravo', 'Charlie'], 'names A to Z, case ignored');
+  assert.deepEqual((await order('?sort=name&dir=desc')).names, ['Charlie', 'bravo', 'Alpha']);
+  assert.deepEqual((await order('?sort=__proto__')).names, plain.names, 'an unknown column is ignored');
+  assert.match(opened.html, /<tfoot><tr><td>Total<\/td><td><\/td><td>6<\/td><td>1<\/td>/, 'totals unchanged');
+});
+
+
+test('Members includes unattributed members, explicit classes, unknown reads, and independent sorting', async (t) => {
+  let list = [
+    { address: 'uain1external', name: 'Outside <agent>', karma: 300 },
+    { address: 'uain1team', name: 'Team', karma: 20 },
+    { address: 'uain1unclassified', name: 'Other', karma: 0 },
+    { address: 'pending:old', name: 'Archived identity', karma: 0, archival: true },
+  ];
+  const acceptedTask = async () => false;
+  acceptedTask.members = async () => list;
+  const { f, go, login } = await setup(t, { campaignAcceptedTask: acceptedTask });
+  await writeFile(join(f.dataDir, 'admin-member-classes.json'), JSON.stringify({ uain1external: 'External', uain1team: 'Team-test' }));
+  const a = member();
+  await f.request(a, 'POST', '/api/account', { displayName: 'Local account', via: 'x-aldi-01' });
+  const logged = await login('aldi@example.com', PASSWORD);
+  const html = async (q = '') => (await go('/admin' + q, { headers: { Cookie: cookieOf(logged) } })).text();
+  let page = await html('?tab=members&sort=reads&dir=desc');
+  assert.match(page, /<h2>Members<\/h2>/);
+  assert.match(page, /Outside &lt;agent&gt;/);
+  assert.match(page, /Unknown \/ unattributed<\/td><td>External<\/td><td>Unknown<\/td><td>300/);
+  assert.match(page, /Team-test<\/td><td>Unknown<\/td><td>20/);
+  assert.match(page, /Unclassified<\/td><td>Unknown<\/td><td>0/);
+  assert.match(page, /x-aldi-01<\/td><td>Unclassified/);
+  assert.match(page, /accounts, not people/);
+  assert.doesNotMatch(page, /Archived identity/);
+  assert.match(page, /earnings are not loaded/);
+  assert.ok(page.indexOf('Outside &lt;agent&gt;') < page.indexOf('>Team<'));
+  page = await html('?memberSort=karma&memberDir=asc');
+  assert.ok(page.indexOf('>Team<') < page.indexOf('Outside &lt;agent&gt;'));
+  list = null;
+  page = await html("?tab=members");
+  assert.match(page, /Member list unreadable/);
+  assert.match(page, /Unclassified<\/td><td>Unknown<\/td><td>Unknown/);
+  assert.doesNotMatch(page, /<td>0<\/td><\/tr><\/tbody><\/table><\/section>/);
+});
+
+
+test('Numbers tabs isolate tables and signup grouping preserves unknowns and private disclosure', async t => {
+  const read=async()=>false;
+  read.members=async()=>[{address:'a',name:'Alpha',karma:4},{address:'b',name:'Beta',karma:6},{address:'c',name:'Gamma',karma:null},{address:'d',name:'Delta',karma:null}];
+  const {f,go,login}=await setup(t,{campaignAcceptedTask:read});
+  await writeFile(join(f.dataDir,'admin-member-origins.json'),JSON.stringify({a:{ip:'203.0.113.1',location:'Test city <place>'},b:{ip:'203.0.113.1',location:'Test city <place>'}}));
+  const cookie=cookieOf(await login('aldi@example.com',PASSWORD));
+  const get=async q=>(await go('/admin?'+q,{headers:{Cookie:cookie}})).text();
+  let page=await get('tab=members&groupBy=ip&sort=reads&dir=asc');
+  assert.match(page,/2 accounts · 10 known Karma/);
+  assert.equal((page.match(/signup IP unknown<\/th>/g)||[]).length,2);
+  assert.match(page,/<details><summary>Reveal signup IP<\/summary><code>203.0.113.1/);
+  assert.match(page,/Test city &lt;place&gt;/);assert.doesNotMatch(page,/<h2>Posts/);
+  assert.match(page,/tab=members&amp;groupBy=ip&amp;sort=reads&amp;dir=asc&amp;memberSort=/);
+  assert.match(page,/Same IP does not prove the same person/);
+  page=await get('tab=posts');assert.match(page,/<h2>Posts/);assert.doesNotMatch(page,/<h2>Members/);
+  page=await get('tab=replies');assert.match(page,/<h2>Replies/);assert.doesNotMatch(page,/<h2>Posts/);
+  const publicPage=await (await go('/admin?tab=members')).text();assert.doesNotMatch(publicPage,/203.0.113.1|Test city/);
+});
+
+test('signup evidence never leaks into account responses or scoped marketing reads', async t => {
+  const {f,go,login}=await setup(t,{trustProxy:true});
+  const a=member();
+  const created=await f.request(a,'POST','/api/account',{displayName:'Privacy test'});
+  const value=JSON.stringify(created);
+  assert.doesNotMatch(value,/direct-peer|trusted-ingress|signupIp|location/);
+  const data=JSON.parse(await (await import('node:fs/promises')).readFile(join(f.dataDir,'admin-member-origins.json'),'utf8'));
+  assert.ok(data[a.address]);
+  assert.equal(data[a.address].ip,null,'loopback without trusted original IP is unavailable');
+});
+
+test('Joined sorting uses valid native dates, local creation first and unknowns last both ways', async t => {
+  const read=async()=>false;read.members=async()=>[{address:'native-new',name:'New native',karma:1,joined_at:'2026-11-19T10:00:00Z'},{address:'native-old',name:'Old native',karma:1,joined_at:'2026-10-01T00:00:00Z'},{address:'native-unknown',name:'Unknown native',karma:1,joined_at:null}];
+  const {f,go,login}=await setup(t,{campaignAcceptedTask:read});
+  const a=member();await f.request(a,'POST','/api/account',{displayName:'Local created'});
+  const c=cookieOf(await login('aldi@example.com',PASSWORD));
+  const get=async dir=>(await go('/admin?tab=members&memberSort=joined&memberDir='+dir,{headers:{Cookie:c}})).text();
+  let page=await get('asc');assert.ok(page.indexOf('Old native')<page.indexOf('New native'));assert.ok(page.indexOf('Local created')<page.indexOf('Unknown native'));assert.match(page,/2026-10-01 00:00 UTC/);
+  page=await get('desc');assert.ok(page.indexOf('New native')<page.indexOf('Old native'));assert.ok(page.indexOf('Old native')<page.indexOf('Unknown native'));assert.match(page,/memberSort=joined/);
+});
+
+test('Posts and Replies update date sorts both ways, unknown dates last', async t => {
+  const {f,go,login}=await setup(t);
+  const c=cookieOf(await login('aldi@example.com',PASSWORD));
+  const make=async(n)=>{
+    const r=await formPost(go,'/admin/posts',c,{platform:'other',label:n,where:n,body:'Demo',status:'posted',url:'https://example.com/'+encodeURIComponent(n)});assert.equal(r.status,303);
+  };
+  await make('Date Alpha');await new Promise(resolve=>setTimeout(resolve,5));await make('Date Beta');
+  const read=async dir=>(await go('/admin?tab=posts&sort=date&dir='+dir,{headers:{Cookie:c}})).text();
+  const asc=await read('asc'),desc=await read('desc');
+  assert.ok(asc.indexOf('Date Alpha')<asc.indexOf('Date Beta'));assert.ok(desc.indexOf('Date Beta')<desc.indexOf('Date Alpha'));
+  assert.ok(asc.indexOf('Date Beta')<asc.indexOf('X, Aldi &lt;b&gt;01'),'undated seed last ascending');
+  assert.ok(desc.indexOf('Date Alpha')<desc.indexOf('X, Aldi &lt;b&gt;01'),'undated seed last descending');
+  await formPost(go,'/admin/replies',c,replyBody(5));
+  await formPost(go,'/admin/replies/rd-reply-01',c,{status:'replied',replyUrl:'https://www.reddit.com/r/test/comments/a/b/c'});
+  const replies=await(await go('/admin?tab=replies&sort=date',{headers:{Cookie:c}})).text();assert.match(replies,/>Updated<\/a>/);assert.match(replies,/<time datetime=/);
 });

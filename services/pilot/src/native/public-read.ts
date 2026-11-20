@@ -16,9 +16,16 @@ const arr=(value:any):any[]=>value==null?[]:typeof value==='string'?JSON.parse(v
  * Decided by Rahul on 15 November 2026 (docs/security/todos.md, option a). Values that are already
  * structured pass through unchanged, and text that does not parse is left as it is. */
 const parsedText=(value:any,empty:any)=>{if(typeof value!=='string')return value;if(value==='')return empty;try{return JSON.parse(value)}catch{return value}};
+/** A claim revision's id as the ledger committed it (services/pilot/src/ledger/records.ts,
+ * revisionCommitment: `revision: r.id`, `base: r.base`): the pilot's numeric row id as a number, so
+ * verify-ledger.mjs finds "CL-n revision 3" and recomputes its digest, and the MCP claim tools'
+ * integer base_revision round-trips. A native proposal id (`native:...`) was never committed by the
+ * pilot ledger and stays a string. Served as a string before 17 November 2026. */
+export const committedRevisionId=(value:any)=>typeof value==='number'?value:/^[0-9]{1,15}$/.test(String(value))?Number(value):String(value);
 export function committedResearchForm(c:any){
  const out={...c};
  if(typeof out.reproduction==='string')out.reproduction=parsedText(out.reproduction,null);
+ if(typeof out.forecast==='string')out.forecast=parsedText(out.forecast,null);
  for(const key of ['sources','source_checks'])if(typeof out[key]==='string')out[key]=parsedText(out[key],[]);
  out.verifications=(c.verifications??[]).map((v:any)=>{const r={...v};
   if(typeof r.against_claim_history==='string')r.against_claim_history=parsedText(r.against_claim_history,[]);
@@ -273,7 +280,7 @@ export class NativePublicReader{
    const original=await this.original('claim_revisions',String(r.id)),proposal=String(r.id).startsWith('native:')?(await this.records(['legacy_claim_revision/'+r.id])).records['legacy_claim_revision/'+r.id]:null;
    if(proposal&&(proposal.claim!==id||proposal.revision?.id!==r.id))throw Error('native claim revision attribution differs');
    const reviews=[];for(const c of r.reviews??[]){const prior=c.original?await this.original('claim_reviews',String(c.id)):null;reviews.push({...prior,...c,note:prior?.note??null,at:prior?.at??null,event_id:prior?.event_id??null})}
-   history.push({...original,...r,revision:String(r.id),base:r.base?String(r.base):null,sources:(r.sources??[]).map((id:string)=>({id})),reason:proposal?.reason??original?.reason??null,evidence_digest:proposal?.evidence_digest??null,at:proposal?.at??original?.at??null,decided_at:original?.decided_at??null,event_id:original?.event_id??null,reviews});
+   history.push({...original,...r,revision:committedRevisionId(r.id),base:r.base?committedRevisionId(r.base):null,sources:(r.sources??[]).map((id:string)=>({id})),reason:proposal?.reason??original?.reason??null,evidence_digest:proposal?.evidence_digest??null,at:proposal?.at??original?.at??null,decided_at:original?.decided_at??null,event_id:original?.event_id??null,reviews});
   }
   const believed=history.find(r=>r.state==='believed'),drafts=history.filter(r=>['draft','contested'].includes(r.state));return{...o,...this.context(value.state),id,project_id:l?.project??o.project_id,status:believed?'believed':drafts.length?'unconfirmed':'rejected',statement:believed?.statement??o.statement??'',sources:believed?.sources??[],believed_revision:believed?.revision??null,open_drafts:drafts,history,created_by:history[0]?.author??o.created_by??'',created_at:history[0]?.at??o.created_at??null};
  }
