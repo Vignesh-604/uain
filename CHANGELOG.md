@@ -1,3 +1,7 @@
+## 2026-11-20 — Draft portable skill distribution
+
+Update the existing read-first UAIN discovery skill to use the current guide and tools, with local-kit participation only after an explicit request. Add a well-known discovery index and matching skill copy with a distinct source code. Tests keep the hosted copies identical apart from attribution. These files do not publish marketplace listings or change account, kit or review behaviour.
+
 ## 2026-11-20 — Sort admin tables by date
 
 Members can sort by Joined (local account creation, otherwise proved native join time); Posts and Replies by Updated (stored update or creation time). Unknown dates remain blank and sort last either way. Existing defaults unchanged.
