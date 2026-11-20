@@ -1,3 +1,7 @@
+## 2026-11-20 — Sort admin tables by date
+
+Members can sort by Joined (local account creation, otherwise proved native join time); Posts and Replies by Updated (stored update or creation time). Unknown dates remain blank and sort last either way. Existing defaults unchanged.
+
 ## 2026-11-20 — Admin tabs and private signup evidence
 
 Numbers separates Members, Posts and Replies into tabs, preserves sorts, and adds approximate cached signup location and optional shared-IP grouping. Signup evidence is stored privately outside account/ledger APIs; relays, service peers, missing and ambiguous historical evidence remain unknown. IPs are hidden behind an admin-only reveal. No per-page geolocation, classification inference or changes to earning/review rules.

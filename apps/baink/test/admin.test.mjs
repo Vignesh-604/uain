@@ -168,7 +168,7 @@ test('a new post gets a code and a live /go/ link; editing never changes the cod
   // An account joining through it is counted under the post.
   const a = member();
   await f.request(a, 'POST', '/api/account', { displayName: 'A', via: 'rd-r-localllama' });
-  assert.match(await (await go('/admin', { headers: { Cookie: cookie } })).text(), /LocalLLaMA design question<\/a> <a href="https:\/\/reddit.com\/r\/LocalLLaMA\/1"[^]*?rd-r-localllama · Reddit · Posted<\/div><\/td><td>1<\/td><td>1 /);
+  assert.match(await (await go('/admin', { headers: { Cookie: cookie } })).text(), /LocalLLaMA design question<\/a> <a href="https:\/\/reddit.com\/r\/LocalLLaMA\/1"[^]*?rd-r-localllama · Reddit · Posted<\/div><\/td><td>[^]*?<\/td><td>1<\/td><td>1 /);
 });
 
 test('posts page: one tab per status with counts, ?status picks it, platform filter keeps the tab', async (t) => {
@@ -412,7 +412,7 @@ test('marketing:read: the token reads numbers, posts and replies as JSON and sti
   assert.deepEqual(n.notShown.map((x) => [x.code, x.kind, x.status, x.reads]).sort(), [['rd-reply-02', 'reply', 'new', 0], ['x-aldi', 'post', 'draft', 1]]);
   // The JSON agrees with the page a person sees.
   const page = await (await go('/admin', { headers: { Cookie: cookie } })).text();
-  assert.match(page, new RegExp(`<tfoot><tr><td>Total</td><td>${n.posts.total.reads}</td><td>${n.posts.total.accounts}</td>`));
+  assert.match(page, new RegExp(`<tfoot><tr><td>Total</td><td></td><td>${n.posts.total.reads}</td><td>${n.posts.total.accounts}</td>`));
 
   const posts = (await (await get('/admin/api/posts')).json()).posts;
   const draft = posts.find((p) => p.code === 'x-aldi');
@@ -491,7 +491,7 @@ test('numbers: headers sort each table by their column, a second click reverses,
   assert.deepEqual((await order('?sort=name')).names, ['Alpha', 'bravo', 'Charlie'], 'names A to Z, case ignored');
   assert.deepEqual((await order('?sort=name&dir=desc')).names, ['Charlie', 'bravo', 'Alpha']);
   assert.deepEqual((await order('?sort=__proto__')).names, plain.names, 'an unknown column is ignored');
-  assert.match(opened.html, /<tfoot><tr><td>Total<\/td><td>6<\/td><td>1<\/td>/, 'totals unchanged');
+  assert.match(opened.html, /<tfoot><tr><td>Total<\/td><td><\/td><td>6<\/td><td>1<\/td>/, 'totals unchanged');
 });
 
 
@@ -559,4 +559,31 @@ test('signup evidence never leaks into account responses or scoped marketing rea
   const data=JSON.parse(await (await import('node:fs/promises')).readFile(join(f.dataDir,'admin-member-origins.json'),'utf8'));
   assert.ok(data[a.address]);
   assert.equal(data[a.address].ip,null,'loopback without trusted original IP is unavailable');
+});
+
+test('Joined sorting uses valid native dates, local creation first and unknowns last both ways', async t => {
+  const read=async()=>false;read.members=async()=>[{address:'native-new',name:'New native',karma:1,joined_at:'2026-11-19T10:00:00Z'},{address:'native-old',name:'Old native',karma:1,joined_at:'2026-10-01T00:00:00Z'},{address:'native-unknown',name:'Unknown native',karma:1,joined_at:null}];
+  const {f,go,login}=await setup(t,{campaignAcceptedTask:read});
+  const a=member();await f.request(a,'POST','/api/account',{displayName:'Local created'});
+  const c=cookieOf(await login('aldi@example.com',PASSWORD));
+  const get=async dir=>(await go('/admin?tab=members&memberSort=joined&memberDir='+dir,{headers:{Cookie:c}})).text();
+  let page=await get('asc');assert.ok(page.indexOf('Old native')<page.indexOf('New native'));assert.ok(page.indexOf('Local created')<page.indexOf('Unknown native'));assert.match(page,/2026-10-01 00:00 UTC/);
+  page=await get('desc');assert.ok(page.indexOf('New native')<page.indexOf('Old native'));assert.ok(page.indexOf('Old native')<page.indexOf('Unknown native'));assert.match(page,/memberSort=joined/);
+});
+
+test('Posts and Replies update date sorts both ways, unknown dates last', async t => {
+  const {f,go,login}=await setup(t);
+  const c=cookieOf(await login('aldi@example.com',PASSWORD));
+  const make=async(n)=>{
+    const r=await formPost(go,'/admin/posts',c,{platform:'other',label:n,where:n,body:'Demo',status:'posted',url:'https://example.com/'+encodeURIComponent(n)});assert.equal(r.status,303);
+  };
+  await make('Date Alpha');await new Promise(resolve=>setTimeout(resolve,5));await make('Date Beta');
+  const read=async dir=>(await go('/admin?tab=posts&sort=date&dir='+dir,{headers:{Cookie:c}})).text();
+  const asc=await read('asc'),desc=await read('desc');
+  assert.ok(asc.indexOf('Date Alpha')<asc.indexOf('Date Beta'));assert.ok(desc.indexOf('Date Beta')<desc.indexOf('Date Alpha'));
+  assert.ok(asc.indexOf('Date Beta')<asc.indexOf('X, Aldi &lt;b&gt;01'),'undated seed last ascending');
+  assert.ok(desc.indexOf('Date Alpha')<desc.indexOf('X, Aldi &lt;b&gt;01'),'undated seed last descending');
+  await formPost(go,'/admin/replies',c,replyBody(5));
+  await formPost(go,'/admin/replies/rd-reply-01',c,{status:'replied',replyUrl:'https://www.reddit.com/r/test/comments/a/b/c'});
+  const replies=await(await go('/admin?tab=replies&sort=date',{headers:{Cookie:c}})).text();assert.match(replies,/>Updated<\/a>/);assert.match(replies,/<time datetime=/);
 });

@@ -269,7 +269,7 @@ export function createCampaigns({ store, llmsFile, uainLlms, campaigns: seeds = 
         campaigns: [...rows.values()],
       };
     },
-    memberAccounts() { return Object.values(store.read().accounts ?? {}).map(({ address, displayName, via }) => ({ address, name: displayName, via })); },
+    memberAccounts() { return Object.values(store.read().accounts ?? {}).map(({ address, displayName, via, createdAt }) => ({ address, name: displayName, via, createdAt })); },
     /** Posts for /admin: stored posts plus seeds not yet stored, newest first. */
     posts() {
       const stored = store.read().campaignPosts ?? {};
