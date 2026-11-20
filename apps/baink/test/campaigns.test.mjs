@@ -454,3 +454,13 @@ test('first task accepted: a good list is reused for a minute, a failure is not 
   down = false;
   assert.equal(await read(B), false, 'and is not remembered');
 });
+
+
+test('the member table and acceptance share one proved list without per-member fanout', async () => {
+  const fetchImpl = listFetch(() => json(200, listPage([{ address: A, name: 'Outside', karma: 300 }])));
+  const read = karmaReader({ origin: 'https://uain.test', fetchImpl });
+  const [members, accepted] = await Promise.all([read.members(), read(A)]);
+  assert.equal(members[0].name, 'Outside');
+  assert.equal(accepted, true);
+  assert.equal(fetchImpl.urls.length, 1);
+});

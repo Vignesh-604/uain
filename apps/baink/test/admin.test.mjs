@@ -11,12 +11,12 @@ import { hashPassword, writeUsers, readUsers } from '../server/admin.mjs';
 const PASSWORD = 'correct horse battery';
 const CAMPAIGNS = new Map([['x-aldi-01', { label: 'X, Aldi <b>01</b>', intro: 'Hi.', url: 'https://x.com/aldi/status/1' }]]);
 
-async function setup(t) {
+async function setup(t, options = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'baink-admin-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const llmsFile = join(dir, 'llms.txt');
   await writeFile(llmsFile, '# guide\nnode uain-agent.mjs next\n');
-  const f = await fixture(t, { campaignLlmsFile: llmsFile, campaigns: CAMPAIGNS, campaignAcceptedTask: async () => false });
+  const f = await fixture(t, { campaignLlmsFile: llmsFile, campaigns: CAMPAIGNS, campaignAcceptedTask: async () => false, ...options });
   await writeUsers(f.dataDir, { 'aldi@example.com': { password: await hashPassword(PASSWORD), createdAt: '2026-11-10T00:00:00.000Z' } });
   const go = (path, init = {}) => fetch(f.base + path, { redirect: 'manual', ...init, headers: { Origin: audience, ...init.headers } });
   const login = (email, password) => go('/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ email, password }).toString() });
@@ -492,4 +492,38 @@ test('numbers: headers sort each table by their column, a second click reverses,
   assert.deepEqual((await order('?sort=name&dir=desc')).names, ['Charlie', 'bravo', 'Alpha']);
   assert.deepEqual((await order('?sort=__proto__')).names, plain.names, 'an unknown column is ignored');
   assert.match(opened.html, /<tfoot><tr><td>Total<\/td><td>6<\/td><td>1<\/td>/, 'totals unchanged');
+});
+
+
+test('Members includes unattributed members, explicit classes, unknown reads, and independent sorting', async (t) => {
+  let list = [
+    { address: 'uain1external', name: 'Outside <agent>', karma: 300 },
+    { address: 'uain1team', name: 'Team', karma: 20 },
+    { address: 'uain1unclassified', name: 'Other', karma: 0 },
+  ];
+  const acceptedTask = async () => false;
+  acceptedTask.members = async () => list;
+  const { f, go, login } = await setup(t, { campaignAcceptedTask: acceptedTask });
+  await writeFile(join(f.dataDir, 'admin-member-classes.json'), JSON.stringify({ uain1external: 'External', uain1team: 'Team-test' }));
+  const a = member();
+  await f.request(a, 'POST', '/api/account', { displayName: 'Local account', via: 'x-aldi-01' });
+  const logged = await login('aldi@example.com', PASSWORD);
+  const html = async (q = '') => (await go('/admin' + q, { headers: { Cookie: cookieOf(logged) } })).text();
+  let page = await html('?sort=reads&dir=desc');
+  assert.match(page, /<h2>Members<\/h2>/);
+  assert.match(page, /Outside &lt;agent&gt;/);
+  assert.match(page, /Unknown \/ unattributed<\/td><td>External<\/td><td>300/);
+  assert.match(page, /Team-test<\/td><td>20/);
+  assert.match(page, /Unclassified<\/td><td>0/);
+  assert.match(page, /x-aldi-01<\/td><td>Unclassified/);
+  assert.match(page, /accounts, not people/);
+  assert.match(page, /earnings are not loaded/);
+  assert.ok(page.indexOf('Outside &lt;agent&gt;') < page.indexOf('>Team<'));
+  page = await html('?memberSort=karma&memberDir=asc');
+  assert.ok(page.indexOf('>Team<') < page.indexOf('Outside &lt;agent&gt;'));
+  list = null;
+  page = await html();
+  assert.match(page, /Member list unreadable/);
+  assert.match(page, /Unclassified<\/td><td>Unknown/);
+  assert.doesNotMatch(page, /<td>0<\/td><\/tr><\/tbody><\/table><\/section>/);
 });

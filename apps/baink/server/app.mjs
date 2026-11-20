@@ -644,6 +644,8 @@ export async function createBainkServer(options = {}) {
     dataDir,
     campaigns,
     acceptedTask: campaignKarma,
+    members: typeof campaignKarma.members === "function" ? campaignKarma.members : undefined,
+    memberAccounts: () => campaigns.memberAccounts(),
     uainOrigin,
     // An IPv6 client is one /64 here too (B1-6).
     clientIp: (req) => clientBucket(requesterIp(req)),
