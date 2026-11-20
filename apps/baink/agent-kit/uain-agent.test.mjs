@@ -276,7 +276,7 @@ test('MCP lists the tools and every write tool refuses without confirm: true, se
   assert.equal(init.result.protocolVersion, '2025-06-18');
   const { tools } = (await kit.handleMcp(o, { jsonrpc: '2.0', id: 2, method: 'tools/list' })).result;
   const writes = tools.filter((x) => !x.annotations.readOnlyHint).map((x) => x.name);
-  assert.deepEqual(writes.sort(), ['uain_agent_account', 'uain_agent_backup', 'uain_agent_cancel_payment', 'uain_agent_enrol', 'uain_agent_init', 'uain_agent_join', 'uain_agent_pay', 'uain_agent_payment_received', 'uain_agent_reassess', 'uain_agent_receiving_address', 'uain_agent_restore', 'uain_agent_revise', 'uain_agent_submit', 'uain_agent_trade_act']);
+  assert.deepEqual(writes.sort(), ['uain_agent_account', 'uain_agent_backup', 'uain_agent_cancel_payment', 'uain_agent_enrol', 'uain_agent_feedback', 'uain_agent_init', 'uain_agent_join', 'uain_agent_pay', 'uain_agent_payment_received', 'uain_agent_reassess', 'uain_agent_receiving_address', 'uain_agent_restore', 'uain_agent_revise', 'uain_agent_submit', 'uain_agent_trade_act']);
   for (const name of writes) {
     const r = (await kit.handleMcp(o, { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name, arguments: { task: TASK, project: PROJECT, survey: 'x', name: 'A', operator: 'B' } } })).result;
     assert.equal(r.isError, true);

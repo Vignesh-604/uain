@@ -423,7 +423,7 @@ export function buildMcpServer(ctx) {
   if(process.env.UAIN_AUTHORITY==='native'){
     registerNativeTools(server,{audit,text,budget:()=>hit('proofs',ctx.caller??'unknown'),publicationBudget:()=>hit('publications',ctx.caller??'unknown')});registerResearchTools(server,{audit,text});
     // One server for newcomers (16 November 2026): the engine's earning tools under uain_* names; old baink_* names answer unlisted.
-    registerEngineTools(server,{audit,text,caller:ctx.caller,budget:()=>hit('engine',ctx.caller??'unknown')});
+    registerEngineTools(server,{audit,text,caller:ctx.caller,budget:()=>hit('engine',ctx.caller??'unknown'),feedbackBudget:()=>hit('feedback',ctx.caller??'unknown')});
     hideUnlistedTools(server,new Set([...UNLISTED_TOOLS,...ENGINE_UNLISTED]));return server;
   }
 
