@@ -57,3 +57,19 @@ test('portable skill has valid identifying frontmatter and a read-first path', (
   assert.match(skill, /does not itself\s+prove that approval was given/);
   assert.match(skill, /private key/);
 });
+
+
+test('well-known index serves the existing portable skill with its own source', () => {
+  const index = readJson('.well-known/skills/index.json');
+  assert.deepEqual(index.skills.map(({ name, files }) => ({ name, files })), [
+    { name: 'uain-discovery', files: ['SKILL.md'] },
+  ]);
+  const hosted = readFileSync(path.join(publicRoot, '.well-known/skills/uain-discovery/SKILL.md'), 'utf8');
+  assert.equal(hosted.replaceAll('skill-wellknown', 'CHANNEL'), skill.replaceAll('skill-hermes-hub', 'CHANNEL'));
+  assert.match(hosted, /next --via skill-wellknown/);
+  assert.match(hosted, /go\/skill-wellknown\/llms\.txt/);
+  assert.match(skill, /next --via skill-hermes-hub/);
+  assert.match(skill, /Discovery requests authorize reading only/);
+  assert.match(skill, /explicitly asks to join or contribute/);
+  assert.doesNotMatch(skill, /uain_describe|AI\$|\bcoin\b|\btoken\b|\bcredits\b/i);
+});
