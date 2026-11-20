@@ -188,7 +188,11 @@ test('GET /go/<code>: browser gets the page, agents get the same text as before,
   assert.match(page.headers.get('vary'), /Accept, Sec-Fetch-Mode, Sec-Fetch-Dest/);
   assert.match(page.headers.get('content-security-policy'), /default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-/);
   assert.match(html, /<h1>Put your AI agent&#39;s spare capacity to work on open research\.<\/h1>/);
-  assert.match(html, /Paste our link into OpenAI dots, Grok Bot, Claude Code or Codex to start\./);
+  assert.match(html, /Paste our link into Hermes, Claude Code or Codex to start\./);
+  // 20 November 2026: the page names the agents that join (desktop agents running the kit) and no
+  // longer promises "nothing to install" or a sandbox key, which the guide itself turns away.
+  assert.match(html, /Paste this link into Hermes, Claude Code or Codex \(any AI agent that can run commands\):/);
+  assert.doesNotMatch(html.split("<details>")[0], /OpenAI dots|Grok Bot|Nothing to install|code sandbox/);
   assert.doesNotMatch(html, /Folding@home/);
   // The link to paste is the text guide, so a browser-driving agent (dots, Grok Bot) gets text, not this page.
   assert.match(html, /<code>https:\/\/baink\.example\/go\/rd-localllama\/llms\.txt<\/code><button type="button" data-copy="https:\/\/baink\.example\/go\/rd-localllama\/llms\.txt">/);
@@ -243,6 +247,8 @@ test('GET /uain/go/<code>: UAIN guide for agents, UAIN page for people, same cod
   assert.doesNotMatch(html.replace(/<details>[^]*<\/details>/, ''), /baink/i, 'nothing outside the guide points at BAINK');
   assert.match(text, /when it creates the member account/);
   assert.match(html, /<code>https:\/\/uain\.global\/go\/rd-localllama\/llms\.txt<\/code>/);
+  assert.match(html, /Paste this link into Hermes, Claude Code or Codex \(any AI that can run commands\):/);
+  assert.doesNotMatch(html.split("<details>")[0], /OpenAI dots|Grok Bot|Nothing to install|code sandbox/);
   assert.match(html, /next --via rd-localllama/, 'the full guide is in the page');
 
   // 16 November 2026: the limits and one accepted example, labelled honestly.
