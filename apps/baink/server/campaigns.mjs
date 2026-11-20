@@ -269,6 +269,7 @@ export function createCampaigns({ store, llmsFile, uainLlms, campaigns: seeds = 
         campaigns: [...rows.values()],
       };
     },
+    memberAccounts() { return Object.values(store.read().accounts ?? {}).map(({ address, displayName, via }) => ({ address, name: displayName, via })); },
     /** Posts for /admin: stored posts plus seeds not yet stored, newest first. */
     posts() {
       const stored = store.read().campaignPosts ?? {};
@@ -410,9 +411,9 @@ export function karmaReader({ origin = "https://uain.global", fetchImpl = global
     const signal = AbortSignal.timeout(timeoutMs);
     const first = await page(1, signal);
     if (first.pages > maxPages) throw new Error("member list has too many pages");
-    const karma = new Map();
+    const karma = new Map(), members = [];
     let rows = 0;
-    const add = (body) => { rows += body.members.length; for (const m of body.members) if (typeof m?.address === "string") karma.set(m.address, typeof m.karma === "number" && Number.isFinite(m.karma) ? m.karma : null); };
+    const add = (body) => { members.push(...body.members); rows += body.members.length; for (const m of body.members) if (typeof m?.address === "string") karma.set(m.address, typeof m.karma === "number" && Number.isFinite(m.karma) ? m.karma : null); };
     add(first);
     for (let n = 2; n <= first.pages; n++) {
       const body = await page(n, signal);
@@ -422,14 +423,14 @@ export function karmaReader({ origin = "https://uain.global", fetchImpl = global
     }
     // Complete means every member the list counts was read; a short list would turn members into "not yet".
     if (rows !== first.count) throw new Error(`member list gave ${rows} of ${first.count} members`);
-    return { karma, at: now() };
+    return { karma, members, at: now() };
   };
   const current = () => {
     if (snapshot && now() - snapshot.at < 60_000) return Promise.resolve(snapshot);
     inflight ??= load().then((s) => { snapshot = s; return s; }).finally(() => { inflight = null; });
     return inflight;
   };
-  return async (address) => {
+  const read = async (address) => {
     if (accepted.has(address)) return true;
     let s;
     try { s = await current(); } catch { return null; }
@@ -439,6 +440,8 @@ export function karmaReader({ origin = "https://uain.global", fetchImpl = global
     if (karma > 0) accepted.add(address);
     return karma > 0;
   };
+  read.members = async () => { try { return (await current()).members; } catch { return null; } };
+  return read;
 }
 
 // ---- Who opened /go/<code> (docs/campaigns.md, "What counts as an open").
